@@ -173,7 +173,7 @@ snag --doctor --version
 ```
 snag Doctor Report
 ==================
-https://github.com/grantcarthew/snag
+https://github.com/p3bot/snag
 
 Version Information
 ───────────────────

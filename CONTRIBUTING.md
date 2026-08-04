@@ -4,8 +4,8 @@ Thank you for your interest in contributing to snag! This document provides guid
 
 ## Quick Links
 
-- [Issues](https://github.com/grantcarthew/snag/issues) - Report bugs or request features
-- [Pull Requests](https://github.com/grantcarthew/snag/pulls) - Submit code changes
+- [Issues](https://github.com/p3bot/snag/issues) - Report bugs or request features
+- [Pull Requests](https://github.com/p3bot/snag/pulls) - Submit code changes
 - [AGENTS.md](AGENTS.md) - Detailed technical documentation for AI agents and developers
 
 ## Ways to Contribute
@@ -20,7 +20,7 @@ Thank you for your interest in contributing to snag! This document provides guid
 
 When reporting bugs, please:
 
-1. Check [existing issues](https://github.com/grantcarthew/snag/issues) first
+1. Check [existing issues](https://github.com/p3bot/snag/issues) first
 2. Use the bug report template when creating a new issue
 3. Include the output from `snag --doctor` (automatically collects diagnostics)
 4. Provide:
@@ -42,7 +42,7 @@ When reporting bugs, please:
 
 ```bash
 # Clone the repository
-git clone https://github.com/grantcarthew/snag.git
+git clone https://github.com/p3bot/snag.git
 cd snag
 
 # Install dependencies

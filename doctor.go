@@ -144,7 +144,7 @@ func checkLatestVersion() string {
 		Timeout: 10 * time.Second,
 	}
 
-	resp, err := client.Get("https://api.github.com/repos/grantcarthew/snag/releases/latest")
+	resp, err := client.Get("https://api.github.com/repos/p3bot/snag/releases/latest")
 	if err != nil {
 		return ""
 	}
@@ -171,8 +171,8 @@ func (dr *DoctorReport) String() string {
 
 	buf.WriteString("snag Doctor Report\n")
 	buf.WriteString("==================\n")
-	buf.WriteString("Repository:    https://github.com/grantcarthew/snag\n")
-	buf.WriteString("Report Issue:  https://github.com/grantcarthew/snag/issues/new\n")
+	buf.WriteString("Repository:    https://github.com/p3bot/snag\n")
+	buf.WriteString("Report Issue:  https://github.com/p3bot/snag/issues/new\n")
 
 	buf.WriteString(dr.formatSection("Version Information"))
 	buf.WriteString(dr.formatItem("snag version", dr.SnagVersion))

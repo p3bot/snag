@@ -177,7 +177,7 @@ snag --doctor --port 9223
 ```
 snag Doctor Report
 ==================
-https://github.com/grantcarthew/snag
+https://github.com/p3bot/snag
 
 Version Information
 ───────────────────
@@ -335,7 +335,7 @@ if err == nil {
 ```go
 // Query GitHub API for latest release
 client := &http.Client{Timeout: 10 * time.Second}
-resp, err := client.Get("https://api.github.com/repos/grantcarthew/snag/releases/latest")
+resp, err := client.Get("https://api.github.com/repos/p3bot/snag/releases/latest")
 if err == nil {
     defer resp.Body.Close()
     var release struct {

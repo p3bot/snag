@@ -251,7 +251,7 @@ $ go test -v
 --- PASS: TestBrowser_PDFFormat (3.97s)
 ...
 PASS
-ok      github.com/grantcarthew/snag    12.345s
+ok      github.com/p3bot/snag    12.345s
 ```
 
 ---
@@ -270,7 +270,7 @@ go test -cover
 # Output:
 # PASS
 # coverage: 78.5% of statements
-# ok      github.com/grantcarthew/snag    1.234s
+# ok      github.com/p3bot/snag    1.234s
 ```
 
 ### Detailed Coverage by Function

@@ -378,7 +378,7 @@ See [open-browser.md](./open-browser.md) for complete details.
 
 - `2025-10-22-124752-example-domain.md`
 - `2025-10-22-124753-go-programming-language.html`
-- `2025-10-22-124754-github-grantcarthew-snag.pdf`
+- `2025-10-22-124754-github-p3bot-snag.pdf`
 
 **Extension Mapping:**
 

@@ -8,7 +8,7 @@ https://example.com
 https://go.dev
 
 # Project repository
-https://github.com/grantcarthew/snag
+https://github.com/p3bot/snag
 
 # Mozilla Developer Network
 https://developer.mozilla.org

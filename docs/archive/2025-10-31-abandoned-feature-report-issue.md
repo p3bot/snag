@@ -75,7 +75,7 @@ Your diagnostic information is ready to paste!
 
 **URL format:**
 ```
-https://github.com/grantcarthew/snag/issues/new?title=[Bug%20Report]%20Issue%20with%20snag&body=<template>
+https://github.com/p3bot/snag/issues/new?title=[Bug%20Report]%20Issue%20with%20snag&body=<template>
 ```
 
 **Template content (URL-encoded):**
@@ -195,7 +195,7 @@ exec.Command("open", url).Start()
 
 ```go
 const (
-    githubIssueBase = "https://github.com/grantcarthew/snag/issues/new"
+    githubIssueBase = "https://github.com/p3bot/snag/issues/new"
     issueTitle = "[Bug Report] Issue with snag"
 )
 
@@ -495,7 +495,7 @@ snag --report-issue
 # Test 10: Verify GitHub URL
 snag --report-issue
 # Check browser URL
-# Expected: github.com/grantcarthew/snag/issues/new with template
+# Expected: github.com/p3bot/snag/issues/new with template
 ```
 
 ### Automated Tests

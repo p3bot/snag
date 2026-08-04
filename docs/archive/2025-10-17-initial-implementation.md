@@ -73,7 +73,7 @@
 
 ### Phase 1: Foundation & Setup ✅
 
-- ✅ Initialize Go module (github.com/grantcarthew/snag)
+- ✅ Initialize Go module (github.com/p3bot/snag)
 - ✅ Create project files (main.go, browser.go, fetch.go, convert.go, logger.go, errors.go)
 - ✅ Add MPL 2.0 license headers to all source files
 - ✅ Implement errors.go with sentinel errors (ErrBrowserNotFound, ErrPageLoadTimeout, etc.)

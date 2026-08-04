@@ -300,7 +300,7 @@ Phase 2 of snag adds **Tab Management** capabilities: list, select, and fetch co
 $ snag --list-tabs
 
 Available tabs in Chrome (10 tabs):
-  [1] https://github.com/grantcarthew/snag - grantcarthew/snag: Intelligent web content fetcher
+  [1] https://github.com/p3bot/snag - p3bot/snag: Intelligent web content fetcher
   [2] https://go.dev/doc/ - Documentation - The Go Programming Language
   [3] https://pkg.go.dev/github.com/go-rod/rod - rod package - github.com/go-rod/rod - Go Packages
   [4] https://example.com - Example Domain
@@ -348,7 +348,7 @@ $ snag -t 6
 ```bash
 # Exact match (case-insensitive)
 $ snag -t https://app.internal.com/dashboard
-$ snag -t GITHUB.COM/grantcarthew/snag  # matches github.com (case-insensitive)
+$ snag -t GITHUB.COM/p3bot/snag  # matches github.com (case-insensitive)
 
 # Regex pattern matching
 $ snag -t "github\.com/.*"              # regex: github.com/ + anything
@@ -386,7 +386,7 @@ If multiple tabs match, first match wins.
 # JSON output (future enhancement)
 $ snag --list-tabs --format json
 [
-  {"index": 1, "url": "https://github.com/grantcarthew/snag", "title": "grantcarthew/snag: Intelligent web content fetcher"},
+  {"index": 1, "url": "https://github.com/p3bot/snag", "title": "p3bot/snag: Intelligent web content fetcher"},
   {"index": 2, "url": "https://go.dev/doc/", "title": "Documentation - The Go Programming Language"},
   ...
 ]
@@ -424,7 +424,7 @@ $ snag --list-tabs --format json
 
 ```
 Available tabs in Chrome (10 tabs):
-  [1] https://github.com/grantcarthew/snag - grantcarthew/snag: Intelligent web content fetcher
+  [1] https://github.com/p3bot/snag - p3bot/snag: Intelligent web content fetcher
   [2] https://go.dev/doc/ - Documentation - The Go Programming Language
   ...
 ```
@@ -492,7 +492,7 @@ snag -t 1                                # First tab
 snag -t 6                                # Sixth tab
 
 # Fetch by exact URL (case-insensitive)
-snag -t https://github.com/grantcarthew/snag
+snag -t https://github.com/p3bot/snag
 snag -t GITHUB.COM                       # Case-insensitive
 
 # Fetch by regex pattern
@@ -780,13 +780,13 @@ func hasRegexChars(s string) bool {
 "10"         → Tab 10 (tenth tab, internally index 9)
 
 // 2. Regex pattern (has regex chars)
-"github\\.com/.*"              → Matches https://github.com/grantcarthew/snag
+"github\\.com/.*"              → Matches https://github.com/p3bot/snag
 ".*/dashboard"                 → Matches https://app.internal.com/dashboard
 "(github|gitlab)\\.com"        → Matches github.com or gitlab.com
 "docs\\.(md|html)$"            → Matches URLs ending with .md or .html
 
 // 3. Exact match (case-insensitive)
-"https://github.com/grantcarthew/snag"  → Exact match
+"https://github.com/p3bot/snag"  → Exact match
 "GITHUB.COM"                             → Matches github.com (case-insensitive)
 
 // 4. Contains/substring match (fallback)

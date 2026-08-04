@@ -116,7 +116,7 @@ DESCRIPTION:
 EXAMPLES:
   # Fetch a single page (Markdown to stdout)
   snag example.com
-  snag https://github.com/grantcarthew/snag
+  snag https://github.com/p3bot/snag
 
   # Different output formats
   snag -f html example.com
@@ -374,8 +374,8 @@ func runCobra(cmd *cobra.Command, args []string) error {
 
 	if showVersion {
 		fmt.Printf("snag version %s\n", version)
-		fmt.Println("Repository: https://github.com/grantcarthew/snag")
-		fmt.Println("Report issues: https://github.com/grantcarthew/snag/issues/new")
+		fmt.Println("Repository: https://github.com/p3bot/snag")
+		fmt.Println("Report issues: https://github.com/p3bot/snag/issues/new")
 		return nil
 	}
 

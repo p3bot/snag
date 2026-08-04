@@ -221,8 +221,8 @@ func TestDoctorReportString(t *testing.T) {
 	expectedSections := []string{
 		"snag Doctor Report",
 		"==================",
-		"Repository:    https://github.com/grantcarthew/snag",
-		"Report Issue:  https://github.com/grantcarthew/snag/issues/new",
+		"Repository:    https://github.com/p3bot/snag",
+		"Report Issue:  https://github.com/p3bot/snag/issues/new",
 		"Version Information",
 		"Working Directory",
 		"Browser Detection",

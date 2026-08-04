@@ -1,9 +1,9 @@
 # snag
 
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)
-[![Go Report Card](https://goreportcard.com/badge/github.com/grantcarthew/snag)](https://goreportcard.com/report/github.com/grantcarthew/snag)
-[![Go Reference](https://pkg.go.dev/badge/github.com/grantcarthew/snag.svg)](https://pkg.go.dev/github.com/grantcarthew/snag)
-[![GitHub Release](https://img.shields.io/github/v/release/grantcarthew/snag)](https://github.com/grantcarthew/snag/releases)
+[![Go Report Card](https://goreportcard.com/badge/github.com/p3bot/snag)](https://goreportcard.com/report/github.com/p3bot/snag)
+[![Go Reference](https://pkg.go.dev/badge/github.com/p3bot/snag.svg)](https://pkg.go.dev/github.com/p3bot/snag)
+[![GitHub Release](https://img.shields.io/github/v/release/p3bot/snag)](https://github.com/p3bot/snag/releases)
 
 Intelligently fetch web page content using a browser engine.
 
@@ -32,9 +32,9 @@ Modern AI agents need web content in clean, token-efficient formats. snag solves
 
 ```bash
 # Install via Homebrew
-brew tap grantcarthew/tap
-brew trust grantcarthew/tap
-brew install grantcarthew/tap/snag
+brew tap p3bot/tap
+brew trust p3bot/tap
+brew install p3bot/tap/snag
 
 # Fetch a page as Markdown (default format)
 snag example.com
@@ -84,21 +84,21 @@ brew install chromium
 Note: There's a name conflict with an older deprecated tool. Use the full tap name:
 
 ```bash
-brew tap grantcarthew/tap
-brew trust grantcarthew/tap
-brew install grantcarthew/tap/snag
+brew tap p3bot/tap
+brew trust p3bot/tap
+brew install p3bot/tap/snag
 ```
 
 **Go Install:**
 
 ```bash
-go install github.com/grantcarthew/snag@latest
+go install github.com/p3bot/snag@latest
 ```
 
 **Build from Source:**
 
 ```bash
-git clone https://github.com/grantcarthew/snag.git
+git clone https://github.com/p3bot/snag.git
 cd snag
 go build
 ./snag --version
@@ -395,7 +395,7 @@ grep "^https://docs" urls.txt | snag --url-file - -d ./documentation/
 snag --url-file - -d pages/ <<EOF
 # My URLs
 example.com
-github.com/grantcarthew/snag
+github.com/p3bot/snag
 go.dev
 EOF
 
@@ -578,7 +578,7 @@ snag -l
 #   Available tabs in browser (3 tabs, sorted by URL):
 #     [1] https://app.example.com/dashboard (Dashboard (authenticated))
 #     [2] https://docs.python.org/3/ (3.13.1 Documentation)
-#     [3] https://github.com/grantcarthew/snag (grantcarthew/snag: Intelligent web content fetcher)
+#     [3] https://github.com/p3bot/snag (p3bot/snag: Intelligent web content fetcher)
 ```
 
 **Fetch from specific tab by index:**
@@ -604,7 +604,7 @@ snag -t 1 --format png -o screenshot.png
 ```bash
 # Exact URL match (case-insensitive)
 snag -t "https://docs.python.org/3/"
-snag -t "GITHUB.COM/grantcarthew/snag"
+snag -t "GITHUB.COM/p3bot/snag"
 
 # Contains/substring match (processes ALL matching tabs if multiple)
 snag -t "dashboard"      # Outputs to stdout if 1 match, auto-saves all if multiple
@@ -877,7 +877,7 @@ Solutions:
 - Use `--format html` to get raw HTML instead
 - Use `--format text` for plain text only (no formatting)
 - Some complex HTML structures may not convert perfectly to Markdown
-- Report specific issues at https://github.com/grantcarthew/snag/issues
+- Report specific issues at https://github.com/p3bot/snag/issues
 
 ### Platform-Specific Issues
 
@@ -916,7 +916,7 @@ This is normal macOS behavior. To fully quit:
 Still having issues?
 
 1. Run with `--debug` flag for detailed logs
-2. Check existing issues: https://github.com/grantcarthew/snag/issues
+2. Check existing issues: https://github.com/p3bot/snag/issues
 3. Create new issue with:
    - snag version: `snag --version`
    - Operating system and version
@@ -957,7 +957,7 @@ This design makes snag perfect for shell pipelines and AI agent integration.
 
 Contributions welcome! Please:
 
-1. Check existing issues: https://github.com/grantcarthew/snag/issues
+1. Check existing issues: https://github.com/p3bot/snag/issues
 2. Create issue for bugs or feature requests
 3. Submit pull requests against `main` branch
 

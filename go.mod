@@ -1,4 +1,4 @@
-module github.com/grantcarthew/snag
+module github.com/p3bot/snag
 
 go 1.25.3
 

@@ -63,7 +63,7 @@ snag -t 4-6                                     # Tabs 4 through 6
 snag -t 1-1                                     # Single tab (same as --tab 1)
 
 # By exact URL (case-insensitive)
-snag -t "https://github.com/grantcarthew/snag"  # Exact match
+snag -t "https://github.com/p3bot/snag"  # Exact match
 snag -t "EXAMPLE.COM"                           # Case-insensitive
 
 # By substring/contains

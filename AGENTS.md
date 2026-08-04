@@ -30,7 +30,7 @@
 
 ```bash
 # Clone repository
-git clone https://github.com/grantcarthew/snag.git
+git clone https://github.com/p3bot/snag.git
 cd snag
 
 # Install dependencies
@@ -311,7 +311,7 @@ snag --tab 1        # First tab
 snag -t 3           # Third tab
 
 # Fetch by exact URL (case-insensitive)
-snag -t "https://github.com/grantcarthew/snag"
+snag -t "https://github.com/p3bot/snag"
 snag -t "EXAMPLE.COM"  # Case-insensitive match
 
 # Fetch by substring/contains (single match - stdout, multiple matches - auto-save all)
@@ -492,5 +492,5 @@ Third-party licenses in `LICENSES/` directory.
 - **.ai/tasks/**: Task documents (code-review, release-process, etc.)
 - **docs/arguments/**: Complete argument compatibility matrix
 - **docs/testing.md**: Testing documentation and strategies
-- **Repository**: https://github.com/grantcarthew/snag
-- **Issues**: https://github.com/grantcarthew/snag/issues
+- **Repository**: https://github.com/p3bot/snag
+- **Issues**: https://github.com/p3bot/snag/issues

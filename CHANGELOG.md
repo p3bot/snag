@@ -65,6 +65,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Single binary distribution with no runtime dependencies
 - Comprehensive documentation and examples
 
-[unreleased]: https://github.com/grantcarthew/snag/compare/v1.1.0...HEAD
-[1.1.0]: https://github.com/grantcarthew/snag/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/grantcarthew/snag/releases/tag/v1.0.0
+[unreleased]: https://github.com/p3bot/snag/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/p3bot/snag/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/p3bot/snag/releases/tag/v1.0.0

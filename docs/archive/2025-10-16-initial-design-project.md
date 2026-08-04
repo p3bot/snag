@@ -417,7 +417,7 @@ The current `get-webpage` tool (Bash + Node.js + Puppeteer) provides proven patt
 
 ### Implementation Phase (Next)
 
-1. Initialize Go module (`go mod init github.com/grantcarthew/snag`)
+1. Initialize Go module (`go mod init github.com/p3bot/snag`)
 2. Create flat project structure (main.go, browser.go, fetch.go, convert.go, logger.go, errors.go)
 3. Implement CLI framework with urfave/cli and 16 MVP arguments
 4. Implement custom logger with 4 levels and color support
@@ -479,8 +479,8 @@ From `docs/design.md:317-334`:
 ### External Resources
 
 - **Current Tool**: `~/bin/scripts/get-webpage`
-- **Homebrew Tap**: (future) `grantcarthew/tap/snag`
-- **Repository**: (future) `github.com/grantcarthew/snag`
+- **Homebrew Tap**: (future) `p3bot/tap/snag`
+- **Repository**: (future) `github.com/p3bot/snag`
 
 ### Libraries Under Consideration
 
