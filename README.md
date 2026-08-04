@@ -77,9 +77,7 @@ brew install chromium
 
 **Supported browsers:** Chrome, Chromium, Microsoft Edge, Brave, other Chromium-based browsers
 
-### Install snag
-
-**Homebrew (Linux/macOS):**
+### Homebrew (Linux/macOS)
 
 Note: There's a name conflict with an older deprecated tool. Use the full tap name:
 
@@ -89,13 +87,13 @@ brew trust p3bot/tap
 brew install p3bot/tap/snag
 ```
 
-**Go Install:**
+### Go Install
 
 ```bash
 go install github.com/p3bot/snag@latest
 ```
 
-**Build from Source:**
+### Build from Source
 
 ```bash
 git clone https://github.com/p3bot/snag.git
