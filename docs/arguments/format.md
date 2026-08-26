@@ -192,9 +192,9 @@ snag https://example.com --format text -o file      # ⚠️ No extension
 
 **Location:**
 
-- Flag definition: `main.go` (CLI framework)
-- Format validation: `validate.go` functions
-- Format conversion: `convert.go` (Markdown/HTML/Text) and `fetch.go` (PDF/PNG)
+- Flag definition: `internal/cli/root.go` (`init`)
+- Format validation: `internal/validate` (`Format`, `NormalizeFormat`)
+- Format conversion: `internal/format` (`ProcessContent`)
 - Extension mapping: Output generation functions
 
 **Format Conversion Flow:**

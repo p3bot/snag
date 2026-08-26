@@ -252,10 +252,10 @@ Version Information
 
 **Location:**
 
-- Flag definition: `main.go:102`, `main.go:220`
-- Flag priority chain: `main.go:396-424`
-- Handler: `handlers.go:handleDoctor()` (handlers.go:995-1021)
-- Doctor logic: `doctor.go:DoctorReport`, `CollectDoctorInfo()`, `Print()`
+- Flag definition: `internal/cli/root.go` (`init`)
+- Flag priority chain: `internal/cli/root.go` (`runCobra`)
+- Handler: `internal/cli/handlers.go` (`handleDoctor`)
+- Doctor logic: `internal/doctor/doctor.go` (`DoctorReport`, `CollectDoctorInfo`, `Print`)
 
 **How it works:**
 
@@ -275,7 +275,7 @@ Version Information
 
 **Data Collection:**
 
-- **Version**: From build ldflags (`-X main.version=...`)
+- **Version**: From build ldflags (`-X github.com/p3bot/snag/internal/cli.Version=...`)
 - **Go Version**: `runtime.Version()`
 - **OS/Arch**: `runtime.GOOS`, `runtime.GOARCH`
 - **Working Dir**: `os.Getwd()`

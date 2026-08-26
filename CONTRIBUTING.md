@@ -49,7 +49,7 @@ cd snag
 go mod download
 
 # Build the project
-go build -o snag
+go build -o snag ./cmd/snag
 
 # Verify installation
 ./snag --version
@@ -57,35 +57,34 @@ go build -o snag
 
 ### Project Structure
 
-snag uses a flat file structure at the project root:
+snag uses `cmd/snag` plus `internal/` packages:
 
-- `main.go` - CLI framework (Cobra), flags, command routing
-- `browser.go` - Browser and tab management (rod library)
-- `fetch.go` - Page fetching, Chrome DevTools Protocol operations
-- `formats.go` - Content conversion (HTML to Markdown/Text, PDF, PNG)
-- `handlers.go` - CLI command handlers
-- `logger.go` - Custom logger (4 levels, stderr only)
-- `errors.go` - Sentinel errors
-- `validate.go` - Input validation
-- `output.go` - Filename generation and conflict resolution
-- `doctor.go` - Diagnostic information collection
+- `cmd/snag/main.go` - Thin entry point (run CLI, map errors to exit codes)
+- `internal/cli` - Cobra command, flags, handlers, signals
+- `internal/browser` - Browser and tab management (rod)
+- `internal/fetch` - Page navigation and content extraction
+- `internal/format` - Content conversion (HTML to Markdown/Text, PDF, PNG)
+- `internal/logger` - Custom logger (4 levels, stderr only)
+- `internal/validate` - Input validation
+- `internal/output` - Filename generation and conflict resolution
+- `internal/doctor` - Diagnostic information collection
 
-Tests are in corresponding `*_test.go` files.
+Tests live beside the code they exercise. Shared fixtures are in module-root `testdata/`.
 
 ## Running Tests
 
 ```bash
 # Run all tests
-go test -v
+go test -v ./...
 
-# Run specific test file
-go test -v -run TestValidate
+# Run specific package
+go test -v ./internal/validate
 
 # Run with coverage
-go test -v -cover
+go test -v -cover ./...
 
 # Run browser integration tests (requires Chrome/Chromium)
-go test -v -run TestBrowser
+go test -v ./internal/cli -run TestBrowser
 ```
 
 **Test requirements:**
@@ -108,12 +107,12 @@ go test -v -run TestBrowser
 - `stderr`: All logs, warnings, errors, progress indicators
 
 **Naming Conventions:**
-- Exported constants: `FormatMarkdown`, `FormatHTML`
-- Sentinel errors: `ErrBrowserNotFound`, `ErrPageLoadTimeout`
-- Functions: Descriptive verbs - `validateURL()`, `fetchPage()`, `convertToMarkdown()`
+- Exported constants: `format.Markdown`, `format.HTML`
+- Sentinel errors: `browser.ErrBrowserNotFound`, `fetch.ErrPageLoadTimeout`
+- Functions: Descriptive verbs - `validate.URL()`, `fetchPage()`, `convertToMarkdown()`
 
 **Error Handling:**
-- Use sentinel errors defined in `errors.go`
+- Use sentinel errors defined in the owning package
 - Wrap errors with context: `fmt.Errorf("failed to navigate to %s: %w", url, err)`
 - Clear, actionable error messages via logger
 - Never panic for expected errors
@@ -138,7 +137,7 @@ Add MPL 2.0 header to all new `.go` files:
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package <name>
 ```
 
 ### Code Quality
@@ -153,7 +152,7 @@ gofmt -w .
 go vet ./...
 
 # Run tests
-go test -v
+go test -v ./...
 ```
 
 ## Branch Management
@@ -203,8 +202,8 @@ refactor(logger): simplify error formatting
    - Add/update tests as needed
    - Update documentation if changing CLI interface
 4. **Test thoroughly:**
-   - Run all tests: `go test -v`
-   - Build successfully: `go build`
+   - Run all tests: `go test -v ./...`
+   - Build successfully: `go build -o snag ./cmd/snag`
    - Test manually with `./snag`
 5. **Submit pull request:**
    - Title: `[component] Brief description`

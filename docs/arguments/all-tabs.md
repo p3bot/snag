@@ -181,9 +181,9 @@ snag --list-tabs --all-tabs                     # --list-tabs overrides, lists a
 
 **Location:**
 
-- Flag definition: `main.go:init()`
-- Handler: `handlers.go:handleAllTabs()`
-- Tab listing: `browser.go:ListTabs()`
+- Flag definition: `internal/cli/root.go` (`init`)
+- Handler: `internal/cli/handlers.go` (`handleAllTabs`)
+- Tab listing: `internal/browser` (`ListTabs`)
 - Tab fetching: Reuse existing fetch logic per tab
 
 **How it works:**

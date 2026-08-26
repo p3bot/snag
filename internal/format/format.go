@@ -4,11 +4,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package format
 
 import (
 	"fmt"
-	"io"
 	"os"
 
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
@@ -16,15 +15,46 @@ import (
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/strikethrough"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/table"
-	"github.com/go-rod/rod"
-	"github.com/go-rod/rod/lib/proto"
 	"github.com/k3a/html2text"
+	"github.com/p3bot/snag/internal/logger"
 )
 
 const (
 	DefaultFileMode = 0644   // Owner RW, Group R, Other R
 	BytesPerKB      = 1024.0 // Bytes in a kilobyte
 )
+
+const (
+	Markdown = "md"
+	HTML     = "html"
+	Text     = "text"
+	PDF      = "pdf"
+	PNG      = "png"
+)
+
+// BinaryPage is the page surface needed for PDF and PNG output.
+type BinaryPage interface {
+	PDF() ([]byte, error)
+	ScreenshotPNG() ([]byte, error)
+}
+
+// Page is the page surface for text and binary formats.
+type Page interface {
+	HTML() (string, error)
+	BinaryPage
+}
+
+func ProcessContent(page Page, formatName, outputFile string) error {
+	converter := NewContentConverter(formatName)
+	if formatName == PDF || formatName == PNG {
+		return converter.ProcessPage(page, outputFile)
+	}
+	html, err := page.HTML()
+	if err != nil {
+		return fmt.Errorf("failed to extract HTML: %w", err)
+	}
+	return converter.Process(html, outputFile)
+}
 
 var markdownConverter = converter.NewConverter(
 	converter.WithPlugins(
@@ -50,11 +80,11 @@ func (cc *ContentConverter) Process(html string, outputFile string) error {
 	var err error
 
 	switch cc.format {
-	case FormatHTML:
+	case HTML:
 		content = html
 		logger.Verbose("Output format: HTML (passthrough)")
 
-	case FormatMarkdown:
+	case Markdown:
 		logger.Verbose("Converting HTML to Markdown...")
 		content, err = cc.convertToMarkdown(html)
 		if err != nil {
@@ -62,7 +92,7 @@ func (cc *ContentConverter) Process(html string, outputFile string) error {
 		}
 		logger.Debug("Converted to %d bytes of Markdown", len(content))
 
-	case FormatText:
+	case Text:
 		logger.Verbose("Extracting plain text...")
 		content = cc.extractPlainText(html)
 		logger.Debug("Extracted %d bytes of plain text", len(content))
@@ -127,22 +157,22 @@ func (cc *ContentConverter) writeToFile(content string, filename string) error {
 	return nil
 }
 
-func (cc *ContentConverter) ProcessPage(page *rod.Page, outputFile string) error {
+func (cc *ContentConverter) ProcessPage(page BinaryPage, outputFile string) error {
 	var data []byte
 	var err error
 
 	switch cc.format {
-	case FormatPDF:
+	case PDF:
 		logger.Verbose("Generating PDF...")
-		data, err = cc.generatePDF(page)
+		data, err = page.PDF()
 		if err != nil {
 			return fmt.Errorf("failed to generate PDF: %w", err)
 		}
 		logger.Debug("Generated %d bytes of PDF", len(data))
 
-	case FormatPNG:
+	case PNG:
 		logger.Verbose("Capturing PNG screenshot...")
-		data, err = cc.captureScreenshot(page)
+		data, err = page.ScreenshotPNG()
 		if err != nil {
 			return fmt.Errorf("failed to capture PNG screenshot: %w", err)
 		}
@@ -157,33 +187,6 @@ func (cc *ContentConverter) ProcessPage(page *rod.Page, outputFile string) error
 	}
 
 	return cc.writeBinaryToStdout(data)
-}
-
-func (cc *ContentConverter) generatePDF(page *rod.Page) ([]byte, error) {
-	stream, err := page.PDF(&proto.PagePrintToPDF{
-		PrintBackground: true,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("PDF generation failed: %w", err)
-	}
-
-	pdfData, err := io.ReadAll(stream)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read PDF data: %w", err)
-	}
-
-	return pdfData, nil
-}
-
-func (cc *ContentConverter) captureScreenshot(page *rod.Page) ([]byte, error) {
-	screenshotData, err := page.Screenshot(true, &proto.PageCaptureScreenshot{
-		Format: proto.PageCaptureScreenshotFormatPng,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("screenshot capture failed: %w", err)
-	}
-
-	return screenshotData, nil
 }
 
 func (cc *ContentConverter) writeBinaryToStdout(data []byte) error {

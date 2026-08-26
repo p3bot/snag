@@ -82,7 +82,7 @@ snag --help --version                               # Shows HELP (not version)
 **Location:**
 
 - Flag definition: Built into `github.com/spf13/cobra` framework
-- Version variable: `main.go` (package-level `version` variable)
+- Version variable: `internal/cli/root.go` (package-level `Version`)
 
 **Processing:**
 
@@ -95,7 +95,7 @@ snag --help --version                               # Shows HELP (not version)
 **Version String:**
 
 - Default: `"dev"` (development builds)
-- Release: Set via build flag `-ldflags "-X main.version=0.0.3"`
+- Release: Set via build flag `-ldflags "-X github.com/p3bot/snag/internal/cli.Version=0.0.3"`
 - Format: Controlled by CLI framework
 
 ---

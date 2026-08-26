@@ -8,7 +8,7 @@
 
 ## Checklist
 
-- [ ] Tests pass (`go test -v`)
+- [ ] Tests pass (`go test -v ./...`)
 - [ ] Code formatted (`gofmt -w .`)
 - [ ] Documentation updated (if applicable)
 - [ ] Follows conventional commit format

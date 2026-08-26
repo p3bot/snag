@@ -4,13 +4,48 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package cli
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/p3bot/snag/internal/browser"
+	"github.com/p3bot/snag/internal/fetch"
+	"github.com/p3bot/snag/internal/logger"
 )
+
+func TestConfig_BrowserOptions(t *testing.T) {
+	c := &Config{
+		URL:           "https://example.com",
+		Port:          9223,
+		ForceHeadless: true,
+		OpenBrowser:   true,
+		UserAgent:     "Bot/1.0",
+		UserDataDir:   "/tmp/snag-profile",
+	}
+
+	opts := c.BrowserOptions()
+	if opts.Port != 9223 {
+		t.Errorf("Port = %d, want 9223", opts.Port)
+	}
+	if !opts.ForceHeadless {
+		t.Error("ForceHeadless = false, want true")
+	}
+	if !opts.OpenBrowser {
+		t.Error("OpenBrowser = false, want true")
+	}
+	if opts.UserAgent != "Bot/1.0" {
+		t.Errorf("UserAgent = %q, want Bot/1.0", opts.UserAgent)
+	}
+	if opts.UserDataDir != "/tmp/snag-profile" {
+		t.Errorf("UserDataDir = %q, want /tmp/snag-profile", opts.UserDataDir)
+	}
+}
 
 func TestStripURLParams(t *testing.T) {
 	tests := []struct {
@@ -200,7 +235,7 @@ func TestDisplayTabList(t *testing.T) {
 	// Create a simple string buffer to capture output
 	var buf strings.Builder
 
-	tabs := []TabInfo{
+	tabs := []browser.TabInfo{
 		{Index: 1, URL: "https://example.com", Title: "Example Domain"},
 		{Index: 2, URL: "https://github.com/user/repo?tab=readme", Title: "GitHub Repo"},
 		{Index: 3, URL: "chrome://newtab/", Title: "New Tab"},
@@ -238,7 +273,7 @@ func TestDisplayTabList(t *testing.T) {
 
 	// Test empty tabs
 	buf.Reset()
-	displayTabList([]TabInfo{}, &buf, false)
+	displayTabList([]browser.TabInfo{}, &buf, false)
 	emptyOutput := buf.String()
 	if !strings.Contains(emptyOutput, "No tabs open in browser") {
 		t.Errorf("Expected 'No tabs' message for empty tab list")
@@ -247,9 +282,9 @@ func TestDisplayTabList(t *testing.T) {
 
 func TestDisplayTabList_LargeLists(t *testing.T) {
 	// Create 100 tabs
-	tabs := make([]TabInfo, 100)
+	tabs := make([]browser.TabInfo, 100)
 	for i := 0; i < 100; i++ {
-		tabs[i] = TabInfo{
+		tabs[i] = browser.TabInfo{
 			Index: i + 1,
 			URL:   fmt.Sprintf("https://example.com/page%d", i),
 			Title: fmt.Sprintf("Page %d", i),
@@ -352,7 +387,7 @@ func TestStripURLParams_EdgeCases(t *testing.T) {
 
 func TestLoadURLsFromReader(t *testing.T) {
 	// Setup logger for tests
-	logger = NewLogger(LevelQuiet)
+	logger.SetDefault(logger.Discard())
 
 	tests := []struct {
 		name        string
@@ -536,5 +571,41 @@ docs.company.com/api  // API docs
 				}
 			}
 		})
+	}
+}
+
+func TestCloseExistingTab_Nil(t *testing.T) {
+	closeExistingTab(nil)
+}
+
+func TestOutputPageInfo_SetsSlug(t *testing.T) {
+	logger.SetDefault(logger.Discard())
+
+	path := filepath.Join(t.TempDir(), "info.json")
+	info := &fetch.PageInfo{
+		Title:  "Hello & World",
+		URL:    "https://example.com",
+		Domain: "example.com",
+	}
+
+	if err := outputPageInfo(info, path); err != nil {
+		t.Fatalf("outputPageInfo: %v", err)
+	}
+
+	if info.Slug != "hello-world" {
+		t.Errorf("Slug = %q, want hello-world", info.Slug)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+
+	var parsed fetch.PageInfo
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if parsed.Slug != "hello-world" {
+		t.Errorf("JSON slug = %q, want hello-world", parsed.Slug)
 	}
 }

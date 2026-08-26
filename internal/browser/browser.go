@@ -4,10 +4,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package browser
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/p3bot/snag/internal/logger"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/devices"
@@ -126,7 +130,7 @@ func NewBrowserManager(opts BrowserOptions) *BrowserManager {
 	}
 }
 
-func (bm *BrowserManager) Connect() (*rod.Browser, error) {
+func (bm *BrowserManager) Connect() error {
 	if !bm.forceHeadless {
 		logger.Verbose("Checking for existing browser instance on port %d...", bm.port)
 		if browser, err := bm.connectToExisting(); err == nil {
@@ -143,7 +147,7 @@ func (bm *BrowserManager) Connect() (*rod.Browser, error) {
 			}
 			bm.browser = browser
 			bm.wasLaunched = false
-			return browser, nil
+			return nil
 		}
 		logger.Verbose("No existing browser instance found")
 	}
@@ -158,7 +162,7 @@ func (bm *BrowserManager) Connect() (*rod.Browser, error) {
 
 	browser, err := bm.launchBrowser(headless)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if headless {
@@ -170,7 +174,17 @@ func (bm *BrowserManager) Connect() (*rod.Browser, error) {
 	bm.browser = browser
 	bm.wasLaunched = true
 	bm.launchedHeadless = headless
-	return browser, nil
+	return nil
+}
+
+// ConnectExisting attaches to a browser already listening on the debug port.
+func (bm *BrowserManager) ConnectExisting() error {
+	b, err := bm.connectToExisting()
+	if err != nil {
+		return err
+	}
+	bm.browser = b
+	return nil
 }
 
 func (bm *BrowserManager) connectToExisting() (*rod.Browser, error) {
@@ -296,7 +310,7 @@ func (bm *BrowserManager) OpenBrowserOnly() error {
 	return nil
 }
 
-func (bm *BrowserManager) NewPage() (*rod.Page, error) {
+func (bm *BrowserManager) NewPage() (*Page, error) {
 	if bm.browser == nil {
 		return nil, fmt.Errorf("browser not connected")
 	}
@@ -324,7 +338,7 @@ func (bm *BrowserManager) NewPage() (*rod.Page, error) {
 		}
 	}
 
-	return page, nil
+	return wrapPage(page), nil
 }
 
 func (bm *BrowserManager) Close() {
@@ -351,7 +365,7 @@ func (bm *BrowserManager) Close() {
 	}
 }
 
-func (bm *BrowserManager) ClosePage(page *rod.Page) {
+func (bm *BrowserManager) ClosePage(page *Page) {
 	if page == nil {
 		return
 	}
@@ -364,6 +378,50 @@ func (bm *BrowserManager) ClosePage(page *rod.Page) {
 
 func (bm *BrowserManager) WasLaunched() bool {
 	return bm.wasLaunched
+}
+
+func (bm *BrowserManager) LaunchedHeadless() bool {
+	return bm.launchedHeadless
+}
+
+func (bm *BrowserManager) Name() string {
+	return bm.browserName
+}
+
+func (bm *BrowserManager) FindBrowserPath() (string, error) {
+	return bm.findBrowserPath()
+}
+
+// ProbePort reports how many page tabs are open on a debugging port.
+// It uses Chrome's HTTP /json/list so it does not attach a DevTools session
+// (Rod Close() would send Browser.close and quit the user's Chrome).
+func ProbePort(port int) (tabCount int, err error) {
+	client := &http.Client{Timeout: ConnectTimeout}
+	url := fmt.Sprintf("http://127.0.0.1:%d/json/list", port)
+	resp, err := client.Get(url)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %w", ErrBrowserConnection, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("%w: GET %s: %s", ErrBrowserConnection, url, resp.Status)
+	}
+
+	var targets []struct {
+		Type string `json:"type"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&targets); err != nil {
+		return 0, fmt.Errorf("%w: decode tab list: %w", ErrBrowserConnection, err)
+	}
+
+	n := 0
+	for _, t := range targets {
+		if t.Type == "page" {
+			n++
+		}
+	}
+	return n, nil
 }
 
 type pageWithInfo struct {
@@ -436,7 +494,7 @@ func (bm *BrowserManager) ListTabs() ([]TabInfo, error) {
 	return tabs, nil
 }
 
-func (bm *BrowserManager) GetTabByIndex(index int) (*rod.Page, error) {
+func (bm *BrowserManager) GetTabByIndex(index int) (*Page, error) {
 	pagesWithInfo, err := bm.getSortedPagesWithInfo()
 	if err != nil {
 		return nil, err
@@ -450,74 +508,38 @@ func (bm *BrowserManager) GetTabByIndex(index int) (*rod.Page, error) {
 
 	logger.Verbose("Selected tab [%d] from sorted order: %s", index, pagesWithInfo[arrayIndex].url)
 
-	return pagesWithInfo[arrayIndex].page, nil
+	return wrapPage(pagesWithInfo[arrayIndex].page), nil
 }
 
-func (bm *BrowserManager) GetTabByPattern(pattern string) (*rod.Page, error) {
-	pages, err := bm.GetTabsByPattern(pattern)
+func (bm *BrowserManager) GetTabsByPattern(pattern string) ([]*Page, error) {
+	pagesWithInfo, err := bm.getSortedPagesWithInfo()
 	if err != nil {
 		return nil, err
 	}
-	return pages[0], nil
-}
 
-func (bm *BrowserManager) GetTabsByPattern(pattern string) ([]*rod.Page, error) {
-	if bm.browser == nil {
-		return nil, ErrNoBrowserRunning
-	}
-
-	pages, err := bm.browser.Pages()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get pages: %w", err)
-	}
-
-	if len(pages) == 0 {
+	if len(pagesWithInfo) == 0 {
 		return nil, fmt.Errorf("%w: '%s' (no tabs open)", ErrNoTabMatch, pattern)
 	}
 
-	type pageCache struct {
-		page  *rod.Page
-		url   string
-		index int
-	}
-
-	var cached []pageCache
-	for i, page := range pages {
-		info, err := page.Info()
-		if err != nil {
-			logger.Warning("Failed to get info for page %d: %v", i+1, err)
-			continue
-		}
-		cached = append(cached, pageCache{
-			page:  page,
-			url:   info.URL,
-			index: i + 1,
-		})
-	}
-
-	if len(cached) == 0 {
-		return nil, fmt.Errorf("%w: '%s' (no accessible tabs)", ErrNoTabMatch, pattern)
-	}
-
-	logger.Debug("Matching pattern '%s' against %d tabs", pattern, len(cached))
+	logger.Debug("Matching pattern '%s' against %d tabs", pattern, len(pagesWithInfo))
 	patternLower := strings.ToLower(pattern)
 
-	var exactMatches []*rod.Page
-	for _, pc := range cached {
-		if strings.EqualFold(pc.url, pattern) {
-			logger.Verbose("Matched tab [%d] via exact URL: %s", pc.index, pc.url)
-			exactMatches = append(exactMatches, pc.page)
+	var exactMatches []*Page
+	for i, pwi := range pagesWithInfo {
+		if strings.EqualFold(pwi.url, pattern) {
+			logger.Verbose("Matched tab [%d] via exact URL: %s", i+1, pwi.url)
+			exactMatches = append(exactMatches, wrapPage(pwi.page))
 		}
 	}
 	if len(exactMatches) > 0 {
 		return exactMatches, nil
 	}
 
-	var substringMatches []*rod.Page
-	for _, pc := range cached {
-		if strings.Contains(strings.ToLower(pc.url), patternLower) {
-			logger.Verbose("Matched tab [%d] via substring: %s", pc.index, pc.url)
-			substringMatches = append(substringMatches, pc.page)
+	var substringMatches []*Page
+	for i, pwi := range pagesWithInfo {
+		if strings.Contains(strings.ToLower(pwi.url), patternLower) {
+			logger.Verbose("Matched tab [%d] via substring: %s", i+1, pwi.url)
+			substringMatches = append(substringMatches, wrapPage(pwi.page))
 		}
 	}
 	if len(substringMatches) > 0 {
@@ -530,11 +552,11 @@ func (bm *BrowserManager) GetTabsByPattern(pattern string) ([]*rod.Page, error) 
 		return nil, fmt.Errorf("invalid regex pattern '%s': %w", pattern, err)
 	}
 
-	var regexMatches []*rod.Page
-	for _, pc := range cached {
-		if re.MatchString(pc.url) {
-			logger.Verbose("Matched tab [%d] via regex: %s", pc.index, pc.url)
-			regexMatches = append(regexMatches, pc.page)
+	var regexMatches []*Page
+	for i, pwi := range pagesWithInfo {
+		if re.MatchString(pwi.url) {
+			logger.Verbose("Matched tab [%d] via regex: %s", i+1, pwi.url)
+			regexMatches = append(regexMatches, wrapPage(pwi.page))
 		}
 	}
 	if len(regexMatches) > 0 {
@@ -545,7 +567,7 @@ func (bm *BrowserManager) GetTabsByPattern(pattern string) ([]*rod.Page, error) 
 	return nil, fmt.Errorf("%w: '%s'", ErrNoTabMatch, pattern)
 }
 
-func (bm *BrowserManager) GetTabsByRange(start, end int) ([]*rod.Page, error) {
+func (bm *BrowserManager) GetTabsByRange(start, end int) ([]*Page, error) {
 	pagesWithInfo, err := bm.getSortedPagesWithInfo()
 	if err != nil {
 		return nil, err
@@ -567,9 +589,9 @@ func (bm *BrowserManager) GetTabsByRange(start, end int) ([]*rod.Page, error) {
 
 	rangeWithInfo := pagesWithInfo[start-1 : end]
 
-	rangeTabs := make([]*rod.Page, len(rangeWithInfo))
+	rangeTabs := make([]*Page, len(rangeWithInfo))
 	for i, pwi := range rangeWithInfo {
-		rangeTabs[i] = pwi.page
+		rangeTabs[i] = wrapPage(pwi.page)
 	}
 
 	logger.Verbose("Selected %d tabs from sorted range [%d-%d]", len(rangeTabs), start, end)

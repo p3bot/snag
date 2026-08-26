@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package doctor
 
 import (
 	"encoding/json"
@@ -14,6 +14,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/p3bot/snag/internal/browser"
 )
 
 type DoctorReport struct {
@@ -46,9 +48,9 @@ type PortStatus struct {
 	Error    error
 }
 
-func CollectDoctorInfo(customPort int) (*DoctorReport, error) {
+func CollectDoctorInfo(snagVersion string, customPort int) (*DoctorReport, error) {
 	report := &DoctorReport{
-		SnagVersion: version,
+		SnagVersion: snagVersion,
 		GoVersion:   runtime.Version(),
 		OS:          runtime.GOOS,
 		Arch:        runtime.GOARCH,
@@ -66,14 +68,14 @@ func CollectDoctorInfo(customPort int) (*DoctorReport, error) {
 	report.EnvVars["CHROME_PATH"] = os.Getenv("CHROME_PATH")
 	report.EnvVars["CHROMIUM_PATH"] = os.Getenv("CHROMIUM_PATH")
 
-	bm := NewBrowserManager(BrowserOptions{Port: customPort})
+	bm := browser.NewBrowserManager(browser.BrowserOptions{Port: customPort})
 
-	path, err := bm.findBrowserPath()
+	path, err := bm.FindBrowserPath()
 	if err != nil {
 		report.BrowserError = err
 	} else {
 		report.BrowserPath = path
-		report.BrowserName = bm.browserName
+		report.BrowserName = bm.Name()
 
 		version, err := bm.GetBrowserVersion()
 		if err == nil {
@@ -102,25 +104,18 @@ func checkPortConnection(port int) *PortStatus {
 		Running: false,
 	}
 
-	bm := NewBrowserManager(BrowserOptions{Port: port})
-
 	done := make(chan bool, 1)
 	var tabCount int
 	var connErr error
 
 	go func() {
-		browser, err := bm.connectToExisting()
+		n, err := browser.ProbePort(port)
 		if err != nil {
 			connErr = err
 			done <- false
 			return
 		}
-
-		pages, err := browser.Pages()
-		if err == nil {
-			tabCount = len(pages)
-		}
-
+		tabCount = n
 		done <- true
 	}()
 

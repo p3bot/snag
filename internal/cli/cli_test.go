@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package cli
 
 import (
 	"bytes"
@@ -19,10 +19,25 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+
+	"github.com/p3bot/snag/internal/testutil"
 )
 
 // TestMain runs before and after all tests to ensure cleanup
+var snagBin string
+
 func TestMain(m *testing.M) {
+	tmp, err := os.MkdirTemp("", "snag-cli-test-")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "mkdir temp: %v\n", err)
+		os.Exit(ExitCodeError)
+	}
+	snagBin = filepath.Join(tmp, "snag")
+	if err := testutil.BuildSnag(snagBin); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(ExitCodeError)
+	}
+
 	// Set up signal handling to cleanup on Ctrl+C
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
@@ -42,6 +57,7 @@ func TestMain(m *testing.M) {
 
 	// Clean up any orphaned Chrome instances after running tests
 	cleanupOrphanedBrowsers()
+	os.RemoveAll(tmp)
 
 	os.Exit(exitCode)
 }
@@ -116,10 +132,7 @@ func startTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
 	// Get absolute path to testdata directory
-	testdataPath, err := filepath.Abs("testdata")
-	if err != nil {
-		t.Fatalf("failed to get testdata path: %v", err)
-	}
+	testdataPath := testutil.Testdata()
 
 	// Create file server
 	fileServer := http.FileServer(http.Dir(testdataPath))
@@ -138,7 +151,8 @@ func startTestServer(t *testing.T) *httptest.Server {
 // runSnag executes the snag binary with the given arguments
 // Returns stdout, stderr, and error
 func runSnag(args ...string) (stdout string, stderr string, err error) {
-	cmd := exec.Command("./snag", args...)
+	cmd := exec.Command(snagBin, args...)
+	cmd.Dir = testutil.ModuleRoot()
 
 	// Capture stdout and stderr separately
 	stdoutBytes, stderrBytes, err := runCommand(cmd)
@@ -242,7 +256,7 @@ func TestCLI_Version(t *testing.T) {
 
 	// Version should be in output (could be stdout or stderr)
 	output := stdout + stderr
-	if !strings.Contains(output, "snag version") && !strings.Contains(output, version) {
+	if !strings.Contains(output, "snag version") && !strings.Contains(output, Version) {
 		t.Errorf("expected version in output, got: %s", output)
 	}
 }

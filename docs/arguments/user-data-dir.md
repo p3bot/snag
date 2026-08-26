@@ -253,10 +253,10 @@ snag --user-data-dir ~/.snag/profile --list-tabs           # Flag ignored (list-
 
 **Location:**
 
-- Flag definition: `main.go` (CLI framework)
-- Path validation: `validate.go` (directory exists, not file, permissions)
+- Flag definition: `internal/cli/root.go` (`init`)
+- Path validation: `internal/validate` (`UserDataDir`)
 - Tilde expansion: Before validation, using `os.UserHomeDir()` or equivalent
-- Browser launch: `browser.go` (rod launcher with `--user-data-dir` flag)
+- Browser launch: `internal/browser` (rod launcher with `--user-data-dir` flag)
 
 **How it works:**
 

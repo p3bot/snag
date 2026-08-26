@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package fetch
 
 import (
 	"context"
@@ -13,11 +13,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-rod/rod"
+	"github.com/p3bot/snag/internal/browser"
+	"github.com/p3bot/snag/internal/logger"
 )
 
 type PageFetcher struct {
-	page    *rod.Page
+	page    *browser.Page
 	timeout time.Duration
 }
 
@@ -27,7 +28,7 @@ type FetchOptions struct {
 	WaitFor string
 }
 
-func NewPageFetcher(page *rod.Page, timeout int) *PageFetcher {
+func NewPageFetcher(page *browser.Page, timeout int) *PageFetcher {
 	if page == nil {
 		logger.Warning("NewPageFetcher called with nil page")
 	}
@@ -46,10 +47,7 @@ func (pf *PageFetcher) Fetch(opts FetchOptions) (string, error) {
 
 	logger.Verbose("Navigating to %s (timeout: %ds)...", opts.URL, opts.Timeout)
 
-	// Apply timeout to long-running operations (navigation, wait-for) using inline .Timeout()
-	// This creates temporary timeout clones that don't affect subsequent fast operations
-	// (HTML extraction, auth detection), preventing cumulative timeout issues
-	err := pf.page.Timeout(pf.timeout).Navigate(opts.URL)
+	err := pf.page.NavigateTimeout(opts.URL, pf.timeout)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			logger.Error("Page load timeout exceeded (%ds)", opts.Timeout)
@@ -63,13 +61,13 @@ func (pf *PageFetcher) Fetch(opts FetchOptions) (string, error) {
 	}
 
 	logger.Verbose("Waiting for page to stabilize...")
-	err = pf.page.WaitStable(StabilizeTimeout)
+	err = pf.page.WaitStable(browser.StabilizeTimeout)
 	if err != nil {
 		logger.Warning("Page did not stabilize: %v", err)
 	}
 
 	if opts.WaitFor != "" {
-		err := waitForSelector(pf.page, opts.WaitFor, pf.timeout)
+		err := WaitForSelector(pf.page, opts.WaitFor, pf.timeout)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
 				logger.ErrorWithSuggestion(
@@ -102,17 +100,10 @@ func (pf *PageFetcher) detectAuth() error {
 		return fmt.Errorf("cannot detect auth: page is nil")
 	}
 
-	// SECURITY: This JavaScript is hardcoded and safe. Never accept user-provided
-	// JavaScript for evaluation as it would create XSS vulnerabilities.
-	statusCode, err := pf.page.Eval(`() => {
-		return window.performance?.getEntriesByType?.('navigation')?.[0]?.responseStatus || 0;
-	}`)
-
+	status, err := pf.page.NavigationStatus()
 	if err != nil {
-		// Log but don't fail - this is best-effort auth detection
 		logger.Debug("Failed to get HTTP status via JavaScript: %v", err)
-	} else if statusCode.Value.Int() > 0 {
-		status := statusCode.Value.Int()
+	} else if status > 0 {
 		logger.Debug("HTTP status code: %d", status)
 
 		if status == 401 || status == 403 {
@@ -125,20 +116,20 @@ func (pf *PageFetcher) detectAuth() error {
 		}
 	}
 
-	hasLogin, _, err := pf.page.Has("input[type='password']")
+	hasLogin, err := pf.page.Has("input[type='password']")
 	if err == nil && hasLogin {
-		hasUsername, _, _ := pf.page.Has("input[type='text'], input[type='email'], input[name*='user'], input[name*='login']")
-		hasSubmit, _, _ := pf.page.Has("button[type='submit'], input[type='submit']")
+		hasUsername, _ := pf.page.Has("input[type='text'], input[type='email'], input[name*='user'], input[name*='login']")
+		hasSubmit, _ := pf.page.Has("button[type='submit'], input[type='submit']")
 
 		if hasUsername && hasSubmit {
 			logger.Debug("Detected login form on page")
 
-			title, _ := pf.page.Info()
-			if title != nil && (strings.Contains(strings.ToLower(title.Title), "login") ||
-				strings.Contains(strings.ToLower(title.Title), "sign in") ||
-				strings.Contains(strings.ToLower(title.URL), "/login") ||
-				strings.Contains(strings.ToLower(title.URL), "/signin") ||
-				strings.Contains(strings.ToLower(title.URL), "/auth")) {
+			meta, err := pf.page.Meta()
+			if err == nil && (strings.Contains(strings.ToLower(meta.Title), "login") ||
+				strings.Contains(strings.ToLower(meta.Title), "sign in") ||
+				strings.Contains(strings.ToLower(meta.URL), "/login") ||
+				strings.Contains(strings.ToLower(meta.URL), "/signin") ||
+				strings.Contains(strings.ToLower(meta.URL), "/auth")) {
 
 				logger.Warning("This appears to be a login page")
 				logger.ErrorWithSuggestion(
@@ -157,22 +148,21 @@ func (pf *PageFetcher) getURL() string {
 		logger.Warning("getURL called with nil page")
 		return ""
 	}
-	info, err := pf.page.Info()
+	meta, err := pf.page.Meta()
 	if err != nil {
 		return ""
 	}
-	return info.URL
+	return meta.URL
 }
 
-func waitForSelector(page *rod.Page, selector string, timeout time.Duration) error {
+func WaitForSelector(page *browser.Page, selector string, timeout time.Duration) error {
 	if page == nil {
 		return fmt.Errorf("cannot wait for selector: page is nil")
 	}
 
 	logger.Verbose("Waiting for selector: %s", selector)
 
-	// Apply timeout to Element - it inherits to WaitVisible
-	elem, err := page.Timeout(timeout).Element(selector)
+	elem, err := page.Element(selector, timeout)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			logger.Error("Timeout waiting for selector: %s", selector)

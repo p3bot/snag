@@ -4,12 +4,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package logger
 
 import (
 	"fmt"
 	"io"
 	"os"
+	"sync/atomic"
 )
 
 type LogLevel int
@@ -35,22 +36,63 @@ type Logger struct {
 	writer io.Writer
 }
 
-func NewLogger(level LogLevel) *Logger {
-	color := shouldUseColor()
+var std atomic.Pointer[Logger]
+
+func init() {
+	std.Store(New(LevelNormal))
+}
+
+func current() *Logger {
+	if l := std.Load(); l != nil {
+		return l
+	}
+	return New(LevelNormal)
+}
+
+// SetDefault replaces the package-level logger used by domain packages.
+func SetDefault(l *Logger) {
+	if l == nil {
+		std.Store(New(LevelNormal))
+		return
+	}
+	std.Store(l)
+}
+
+func Success(format string, args ...interface{}) { current().Success(format, args...) }
+func Info(format string, args ...interface{})    { current().Info(format, args...) }
+func Verbose(format string, args ...interface{}) { current().Verbose(format, args...) }
+func Debug(format string, args ...interface{})   { current().Debug(format, args...) }
+func Warning(format string, args ...interface{}) { current().Warning(format, args...) }
+func Error(format string, args ...interface{})   { current().Error(format, args...) }
+func ErrorWithSuggestion(errMsg, suggestion string) {
+	current().ErrorWithSuggestion(errMsg, suggestion)
+}
+
+func New(level LogLevel) *Logger {
 	return &Logger{
 		level:  level,
-		color:  color,
+		color:  shouldUseColor(),
 		writer: os.Stderr,
 	}
 }
 
+func NewWithWriter(level LogLevel, w io.Writer, color bool) *Logger {
+	return &Logger{
+		level:  level,
+		color:  color,
+		writer: w,
+	}
+}
+
+func Discard() *Logger {
+	return NewWithWriter(LevelQuiet, io.Discard, false)
+}
+
 func shouldUseColor() bool {
-	// Respect NO_COLOR environment variable
 	if os.Getenv("NO_COLOR") != "" {
 		return false
 	}
 
-	// Check if stderr is a terminal (TTY)
 	fileInfo, err := os.Stderr.Stat()
 	if err != nil {
 		return false

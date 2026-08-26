@@ -4,22 +4,19 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package validate
 
 import (
-	"io"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/p3bot/snag/internal/format"
+	"github.com/p3bot/snag/internal/logger"
 )
 
 func init() {
-	// Initialize global logger for tests (discard output)
-	logger = &Logger{
-		level:  LevelQuiet,
-		color:  false,
-		writer: io.Discard,
-	}
+	logger.SetDefault(logger.Discard())
 }
 
 func TestValidateURL_Valid(t *testing.T) {
@@ -33,7 +30,7 @@ func TestValidateURL_Valid(t *testing.T) {
 	}
 
 	for _, url := range tests {
-		_, err := validateURL(url)
+		_, err := URL(url)
 		if err != nil {
 			t.Errorf("expected valid URL %q to pass, got error: %v", url, err)
 		}
@@ -51,7 +48,7 @@ func TestValidateURL_Invalid(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		_, err := validateURL(tt.url)
+		_, err := URL(tt.url)
 		if err == nil {
 			t.Errorf("expected invalid URL %q (%s) to fail validation", tt.url, tt.desc)
 		}
@@ -59,7 +56,7 @@ func TestValidateURL_Invalid(t *testing.T) {
 }
 
 func TestValidateURL_MissingScheme(t *testing.T) {
-	// validateURL actually adds https:// if no scheme is present
+	// URL actually adds https:// if no scheme is present
 	tests := []string{
 		"example.com",
 		"www.example.com",
@@ -67,7 +64,7 @@ func TestValidateURL_MissingScheme(t *testing.T) {
 	}
 
 	for _, url := range tests {
-		normalized, err := validateURL(url)
+		normalized, err := URL(url)
 		if err != nil {
 			t.Errorf("expected URL without scheme %q to be normalized, got error: %v", url, err)
 		}
@@ -78,17 +75,17 @@ func TestValidateURL_MissingScheme(t *testing.T) {
 }
 
 func TestValidateFormat_Valid(t *testing.T) {
-	// Test with normalized format values (as they would be after normalizeFormat)
+	// Test with normalized format values (as they would be after NormalizeFormat)
 	validFormats := []string{
-		FormatMarkdown, // "md"
-		FormatHTML,     // "html"
-		FormatText,     // "text"
-		FormatPDF,      // "pdf"
-		FormatPNG,      // "png"
+		format.Markdown, // "md"
+		format.HTML,     // "html"
+		format.Text,     // "text"
+		format.PDF,      // "pdf"
+		format.PNG,      // "png"
 	}
 
 	for _, format := range validFormats {
-		err := validateFormat(format)
+		err := Format(format)
 		if err != nil {
 			t.Errorf("expected valid format %q to pass validation, got error: %v", format, err)
 		}
@@ -97,7 +94,7 @@ func TestValidateFormat_Valid(t *testing.T) {
 
 func TestValidateFormat_Invalid(t *testing.T) {
 	// Test with truly invalid formats (not supported by snag)
-	// Note: validateFormat expects already-normalized input
+	// Note: Format expects already-normalized input
 	invalidFormats := []string{
 		"json",
 		"xml",
@@ -109,7 +106,7 @@ func TestValidateFormat_Invalid(t *testing.T) {
 	}
 
 	for _, format := range invalidFormats {
-		err := validateFormat(format)
+		err := Format(format)
 		if err == nil {
 			t.Errorf("expected invalid format %q to fail validation", format)
 		}
@@ -146,9 +143,9 @@ func TestNormalizeFormat(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		result := normalizeFormat(tt.input)
+		result := NormalizeFormat(tt.input)
 		if result != tt.expected {
-			t.Errorf("normalizeFormat(%q) = %q, expected %q", tt.input, result, tt.expected)
+			t.Errorf("NormalizeFormat(%q) = %q, expected %q", tt.input, result, tt.expected)
 		}
 	}
 }
@@ -157,7 +154,7 @@ func TestValidateTimeout_Valid(t *testing.T) {
 	validTimeouts := []int{1, 30, 60, 120, 3600}
 
 	for _, timeout := range validTimeouts {
-		err := validateTimeout(timeout)
+		err := Timeout(timeout)
 		if err != nil {
 			t.Errorf("expected valid timeout %d to pass validation, got error: %v", timeout, err)
 		}
@@ -168,7 +165,7 @@ func TestValidateTimeout_Invalid(t *testing.T) {
 	invalidTimeouts := []int{-1, 0, -100}
 
 	for _, timeout := range invalidTimeouts {
-		err := validateTimeout(timeout)
+		err := Timeout(timeout)
 		if err == nil {
 			t.Errorf("expected invalid timeout %d to fail validation", timeout)
 		}
@@ -179,7 +176,7 @@ func TestValidatePort_Valid(t *testing.T) {
 	validPorts := []int{1024, 8080, 9222, 65535}
 
 	for _, port := range validPorts {
-		err := validatePort(port)
+		err := Port(port)
 		if err != nil {
 			t.Errorf("expected valid port %d to pass validation, got error: %v", port, err)
 		}
@@ -190,7 +187,7 @@ func TestValidatePort_Invalid(t *testing.T) {
 	invalidPorts := []int{-1, 0, 1, 80, 443, 1023, -100, 65536, 99999}
 
 	for _, port := range invalidPorts {
-		err := validatePort(port)
+		err := Port(port)
 		if err == nil {
 			t.Errorf("expected invalid port %d to fail validation", port)
 		}
@@ -203,7 +200,7 @@ func TestValidateOutputPath_Valid(t *testing.T) {
 
 	// Test with valid writable path
 	validPath := tmpDir + "/output.md"
-	err := validateOutputPath(validPath)
+	err := OutputPath(validPath)
 	if err != nil {
 		t.Errorf("expected valid writable path %q to pass validation, got error: %v", validPath, err)
 	}
@@ -212,7 +209,7 @@ func TestValidateOutputPath_Valid(t *testing.T) {
 func TestValidateOutputPath_NonexistentDirectory(t *testing.T) {
 	// Test with path to non-existent directory
 	invalidPath := "/nonexistent/directory/output.md"
-	err := validateOutputPath(invalidPath)
+	err := OutputPath(invalidPath)
 	if err == nil {
 		t.Errorf("expected path with non-existent directory %q to fail validation", invalidPath)
 	}
@@ -241,7 +238,7 @@ func TestValidateOutputPath_ReadOnlyDirectory(t *testing.T) {
 
 	// Test with path to read-only directory
 	invalidPath := readOnlyDir + "/output.md"
-	err = validateOutputPath(invalidPath)
+	err = OutputPath(invalidPath)
 	if err == nil {
 		t.Errorf("expected path to read-only directory %q to fail validation", invalidPath)
 	}
@@ -254,7 +251,7 @@ func TestValidateDirectory_Valid(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Should pass validation for existing writable directory
-	err := validateDirectory(tmpDir)
+	err := Directory(tmpDir)
 	if err != nil {
 		t.Errorf("expected valid directory %q to pass validation, got error: %v", tmpDir, err)
 	}
@@ -263,7 +260,7 @@ func TestValidateDirectory_Valid(t *testing.T) {
 func TestValidateDirectory_NonExistent(t *testing.T) {
 	// Test with non-existent directory
 	invalidDir := "/nonexistent/test/directory"
-	err := validateDirectory(invalidDir)
+	err := Directory(invalidDir)
 	if err == nil {
 		t.Errorf("expected non-existent directory %q to fail validation", invalidDir)
 	}
@@ -280,7 +277,7 @@ func TestValidateDirectory_NotADirectory(t *testing.T) {
 	defer os.Remove(tmpFilePath)
 
 	// Should fail because it's a file, not a directory
-	err = validateDirectory(tmpFilePath)
+	err = Directory(tmpFilePath)
 	if err == nil {
 		t.Errorf("expected file path %q to fail directory validation", tmpFilePath)
 	}
@@ -308,7 +305,7 @@ func TestValidateDirectory_ReadOnly(t *testing.T) {
 	})
 
 	// Should fail because directory is not writable
-	err = validateDirectory(readOnlyDir)
+	err = Directory(readOnlyDir)
 	if err == nil {
 		t.Errorf("expected read-only directory %q to fail validation", readOnlyDir)
 	}
@@ -345,9 +342,9 @@ func TestIsNonFetchableURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isNonFetchableURL(tt.url)
+			result := IsNonFetchableURL(tt.url)
 			if result != tt.expected {
-				t.Errorf("isNonFetchableURL(%q) = %v, expected %v", tt.url, result, tt.expected)
+				t.Errorf("IsNonFetchableURL(%q) = %v, expected %v", tt.url, result, tt.expected)
 			}
 		})
 	}
@@ -391,9 +388,9 @@ func TestCheckExtensionMismatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := checkExtensionMismatch(tt.outputFile, tt.format)
+			result := CheckExtensionMismatch(tt.outputFile, tt.format)
 			if result != tt.expected {
-				t.Errorf("checkExtensionMismatch(%q, %q) = %v, expected %v",
+				t.Errorf("CheckExtensionMismatch(%q, %q) = %v, expected %v",
 					tt.outputFile, tt.format, result, tt.expected)
 			}
 		})
@@ -420,9 +417,9 @@ func TestValidateWaitFor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := validateWaitFor(tt.input, true)
+			result := WaitFor(tt.input, true)
 			if result != tt.expected {
-				t.Errorf("validateWaitFor(%q) = %q, expected %q", tt.input, result, tt.expected)
+				t.Errorf("WaitFor(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
 		})
 	}
@@ -453,9 +450,9 @@ func TestValidateUserAgent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := validateUserAgent(tt.input, true)
+			result := UserAgent(tt.input, true)
 			if result != tt.expected {
-				t.Errorf("validateUserAgent(%q) = %q, expected %q", tt.input, result, tt.expected)
+				t.Errorf("UserAgent(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
 		})
 	}
@@ -476,14 +473,14 @@ func TestValidateUserAgent_SecuritySanitization(t *testing.T) {
 
 	for _, tt := range maliciousInputs {
 		t.Run(tt.name, func(t *testing.T) {
-			result := validateUserAgent(tt.input, true)
+			result := UserAgent(tt.input, true)
 			// Result should not contain \n or \r
 			if strings.Contains(result, "\n") || strings.Contains(result, "\r") {
-				t.Errorf("validateUserAgent(%q) still contains newline/CR characters: %q", tt.input, result)
+				t.Errorf("UserAgent(%q) still contains newline/CR characters: %q", tt.input, result)
 			}
 			// If input had newlines, result should have spaces
 			if tt.hasSpace && !strings.Contains(result, " ") {
-				t.Errorf("validateUserAgent(%q) should contain spaces after sanitization: %q", tt.input, result)
+				t.Errorf("UserAgent(%q) should contain spaces after sanitization: %q", tt.input, result)
 			}
 		})
 	}
@@ -509,13 +506,13 @@ func TestValidateURL_IDNHomograph(t *testing.T) {
 		{
 			name:        "mixed script (potential homograph)",
 			url:         "https://раypal.com", // Note: contains Cyrillic 'а'
-			shouldAllow: true,                 // validateURL doesn't block these
+			shouldAllow: true,                 // URL doesn't block these
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := validateURL(tt.url)
+			_, err := URL(tt.url)
 			hasError := err != nil
 
 			if tt.shouldAllow && hasError {
@@ -545,7 +542,7 @@ func TestValidateURL_ExtremelyLong(t *testing.T) {
 			longPath := strings.Repeat("a", tt.urlLength-20)
 			url := "https://example.com/" + longPath
 
-			_, err := validateURL(url)
+			_, err := URL(url)
 
 			if tt.shouldErr && err == nil {
 				t.Errorf("expected error for %d char URL", tt.urlLength)
@@ -570,7 +567,7 @@ func TestValidateUserAgent_ExtremeLength(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			longUA := strings.Repeat("A", tt.length)
-			result := validateUserAgent(longUA, true)
+			result := UserAgent(longUA, true)
 
 			// Should not panic, should return trimmed string
 			if len(result) == 0 {
@@ -597,7 +594,7 @@ func TestValidateWaitFor_Injection(t *testing.T) {
 			selector: "div[data-test='value']",
 			expected: "div[data-test='value']",
 		},
-		// Note: validateWaitFor just trims, doesn't sanitize
+		// Note: WaitFor just trims, doesn't sanitize
 		// These tests document current behavior
 		{
 			name:     "selector with angle brackets",
@@ -608,9 +605,9 @@ func TestValidateWaitFor_Injection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := validateWaitFor(tt.selector, true)
+			result := WaitFor(tt.selector, true)
 			if result != tt.expected {
-				t.Errorf("validateWaitFor() = %q, expected %q", result, tt.expected)
+				t.Errorf("WaitFor() = %q, expected %q", result, tt.expected)
 			}
 		})
 	}

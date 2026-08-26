@@ -4,25 +4,22 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package output
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/p3bot/snag/internal/format"
+	"github.com/p3bot/snag/internal/logger"
 )
 
 func init() {
-	// Initialize global logger for tests (discard output)
-	logger = &Logger{
-		level:  LevelQuiet,
-		color:  false,
-		writer: io.Discard,
-	}
+	logger.SetDefault(logger.Discard())
 }
 
 // TestSlugifyTitle tests URL-safe slug generation from page titles
@@ -84,6 +81,10 @@ func TestGenerateURLSlug(t *testing.T) {
 		{"https://www.github.com/user/repo", "www-github-com", "subdomain"},
 		{"https://api.example.com:8080", "api-example-com-8080", "with port"},
 		{"http://localhost:3000", "localhost-3000", "localhost"},
+		{"https://[::1]", "1", "IPv6 loopback"},
+		{"https://[::1]:8080", "1-8080", "IPv6 loopback with port"},
+		{"https://[2001:db8::1]/path", "2001-db8-1", "IPv6 documentation address"},
+		{"https://[2001:db8::1]:443/path", "2001-db8-1-443", "IPv6 with port"},
 
 		// Edge cases
 		{"file:///path/to/file.html", "page", "file URL"},
@@ -109,11 +110,11 @@ func TestGetFileExtension(t *testing.T) {
 		format   string
 		expected string
 	}{
-		{FormatMarkdown, ".md"},
-		{FormatHTML, ".html"},
-		{FormatText, ".txt"},
-		{FormatPDF, ".pdf"},
-		{FormatPNG, ".png"},
+		{format.Markdown, ".md"},
+		{format.HTML, ".html"},
+		{format.Text, ".txt"},
+		{format.PDF, ".pdf"},
+		{format.PNG, ".png"},
 		{"unknown", ".md"}, // Default fallback
 		{"", ".md"},        // Empty fallback
 	}
@@ -142,35 +143,35 @@ func TestGenerateFilename(t *testing.T) {
 		// Normal cases
 		{
 			"Example Domain",
-			FormatMarkdown,
+			format.Markdown,
 			"https://example.com",
 			"2025-10-21-143045-example-domain.md",
 			"basic markdown",
 		},
 		{
 			"GitHub Repository",
-			FormatHTML,
+			format.HTML,
 			"https://github.com",
 			"2025-10-21-143045-github-repository.html",
 			"html format",
 		},
 		{
 			"Documentation Page",
-			FormatText,
+			format.Text,
 			"https://docs.example.com",
 			"2025-10-21-143045-documentation-page.txt",
 			"text format",
 		},
 		{
 			"PDF Report",
-			FormatPDF,
+			format.PDF,
 			"https://example.com",
 			"2025-10-21-143045-pdf-report.pdf",
 			"pdf format",
 		},
 		{
 			"Screenshot",
-			FormatPNG,
+			format.PNG,
 			"https://example.com",
 			"2025-10-21-143045-screenshot.png",
 			"png format",
@@ -179,14 +180,14 @@ func TestGenerateFilename(t *testing.T) {
 		// Empty title fallback to URL
 		{
 			"",
-			FormatMarkdown,
+			format.Markdown,
 			"https://example.com",
 			"2025-10-21-143045-example-com.md",
 			"empty title uses URL",
 		},
 		{
 			"   ",
-			FormatMarkdown,
+			format.Markdown,
 			"https://www.github.com",
 			"2025-10-21-143045-www-github-com.md",
 			"whitespace title uses URL",
@@ -195,7 +196,7 @@ func TestGenerateFilename(t *testing.T) {
 		// Special characters in title
 		{
 			"Hello@World#2024!!!",
-			FormatMarkdown,
+			format.Markdown,
 			"https://example.com",
 			"2025-10-21-143045-hello-world-2024.md",
 			"special chars removed",
@@ -385,7 +386,7 @@ func TestGenerateFilename_InvalidChars(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := GenerateFilename(tt.title, FormatMarkdown, timestamp, "https://example.com")
+			result := GenerateFilename(tt.title, format.Markdown, timestamp, "https://example.com")
 
 			// Result should not contain filesystem-restricted chars
 			restricted := []string{"<", ">", ":", "\"", "|", "?", "*"}

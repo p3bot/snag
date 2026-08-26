@@ -249,9 +249,9 @@ Batch complete: 2 succeeded, 0 failed
 
 **Location:**
 
-- Flag definition: `main.go:init()`
-- Handler logic: `main.go:runCobra()`
-- URL loading: `handlers.go:loadURLsFromFile()` and `handlers.go:loadURLsFromReader()`
+- Flag definition: `internal/cli/root.go` (`init`)
+- Handler logic: `internal/cli/root.go` (`runCobra`)
+- URL loading: `internal/cli/handlers.go` (`loadURLsFromFile`, `loadURLsFromReader`)
 
 **Processing Order:**
 
@@ -262,8 +262,8 @@ Batch complete: 2 succeeded, 0 failed
 
 **Key Functions:**
 
-- `handlers.go:loadURLsFromFile()` - Entry point, handles `-` for stdin
-- `handlers.go:loadURLsFromReader()` - Core parsing logic (used by both file and stdin)
+- `internal/cli/handlers.go` `loadURLsFromFile` - Entry point, handles `-` for stdin
+- `internal/cli/handlers.go` `loadURLsFromReader` - Core parsing logic (used by both file and stdin)
 - File validation happens before CLI URL validation
 - Invalid URLs logged with line numbers for debugging
 

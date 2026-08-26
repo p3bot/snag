@@ -22,8 +22,8 @@ Snag has a comprehensive test suite covering unit tests, integration tests, and 
 
 ### Test Statistics
 
-- **Total Test Functions**: 124
-- **Test Files**: 6 (`*_test.go`)
+- **Total Test Functions**: 170
+- **Test Files**: 10 (`*_test.go`)
 - **Interactive Test Cases**: 73 (CSV-driven)
 - **Test Code Lines**: ~3,100 lines
 - **Production Code Lines**: ~2,500 lines
@@ -33,15 +33,15 @@ Snag has a comprehensive test suite covering unit tests, integration tests, and 
 
 | Category              | Description                                  | Test Files                                                                                                       |
 | --------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| **Unit Tests**        | Fast, isolated tests of individual functions | `output_test.go`, `validate_test.go`, `formats_test.go`, `logger_test.go`, `browser_test.go`, `handlers_test.go` |
-| **Integration Tests** | End-to-end tests with browser                | `cli_test.go`                                                                                                    |
+| **Unit Tests**        | Fast, isolated tests of individual functions | `internal/{output,validate,format,logger,browser,cli,fetch,doctor}/*_test.go` |
+| **Integration Tests** | End-to-end tests with browser                | `internal/cli/cli_test.go`                                       |
 | **Interactive Tests** | Manual verification via script               | `test-interactive` + `test-interactive.csv`                                                                      |
 
 ---
 
 ## Test Files
 
-### 1. `cli_test.go` (62 tests, 1,600 lines)
+### 1. `internal/cli/cli_test.go` (62 tests, 1,600 lines)
 
 **Purpose**: Integration tests for CLI functionality and browser interactions
 
@@ -75,14 +75,14 @@ TestCLI_InvalidFormat()      // Tests format validation
 - Output verification: Checks stdout, stderr, and files
 - Assertion helpers: `assertContains()`, `assertNoError()`, `assertExitCode()`
 
-### 2. `output_test.go` (7 tests, 288 lines)
+### 2. `internal/output/output_test.go` (10 tests)
 
 **Purpose**: Tests filename generation, slugification, and conflict resolution
 
 **Coverage**:
 
 - `TestSlugifyTitle()` - 12 test cases for slug generation
-- `TestGenerateURLSlug()` - 7 test cases for URL fallback
+- `TestGenerateURLSlug()` - URL fallback slugs, including IPv6 hosts
 - `TestGetFileExtension()` - 7 test cases for format mapping
 - `TestGenerateFilename()` - 8 test cases for complete filename generation
 - `TestResolveConflict()` - File conflict resolution
@@ -97,7 +97,7 @@ TestCLI_InvalidFormat()      // Tests format validation
 "Very Long Title..."          → "very-long-title" (80 char max)
 ```
 
-### 3. `validate_test.go` (24 tests, 535 lines)
+### 3. `internal/validate/validate_test.go` (26 tests)
 
 **Purpose**: Tests input validation and security checks
 
@@ -110,24 +110,26 @@ TestCLI_InvalidFormat()      // Tests format validation
 - `TestValidatePort_*` - Port validation (2 tests)
 - `TestValidateOutputPath_*` - Output path validation (3 tests)
 - `TestValidateDirectory_*` - Directory validation (4 tests)
-- `TestValidateOutputPathEscape_*` - Path escape prevention (2 tests)
 - `TestIsNonFetchableURL()` - Browser-internal URL detection (18 cases)
 - `TestCheckExtensionMismatch()` - File extension validation (16 cases)
 - `TestValidateWaitFor()` - CSS selector validation (10 cases)
-- `TestValidateUserAgent()` - User agent sanitization (11 cases)
+- `TestValidateWaitFor_Injection()` - Documents that selectors are not sanitised
+- `TestValidateUserAgent()` - User agent sanitisation (11 cases)
 - `TestValidateUserAgent_SecuritySanitization()` - HTTP header injection prevention (4 cases)
+- `TestValidateUserAgent_ExtremeLength()` - Long user-agent strings
+- `TestValidateURL_IDNHomograph()` - IDN / punycode URLs allowed
+- `TestValidateURL_ExtremelyLong()` - Long URL paths
 
 **Security Tests**:
 
 ```go
-// Path escape attacks are prevented
-TestValidateOutputPathEscape_Dangerous()
-  - "../etc/passwd"           → BLOCKED
-  - "../../etc/passwd"        → BLOCKED
-  - "subdir/../../etc/passwd" → BLOCKED
+// Newlines in --user-agent are replaced with spaces
+TestValidateUserAgent_SecuritySanitization()
+  - "MyBot/1.0\r\nX-Injected: malicious" → no CR/LF in result
+  - "MyBot/1.0\nX-Injected: malicious"   → no CR/LF in result
 ```
 
-### 4. `formats_test.go` (14 tests, 407 lines)
+### 4. `internal/format/format_test.go` (24 tests)
 
 **Purpose**: Tests format conversion (Markdown, HTML, Text, PDF, PNG)
 
@@ -137,6 +139,7 @@ TestValidateOutputPathEscape_Dangerous()
   - Headings, links, tables, strikethrough, lists, code blocks
 - `TestExtractPlainText_*` - Plain text extraction (8 tests)
   - Headings, links, formatting, scripts, lists
+- `TestProcessContent_*` - Page interface (markdown file, PDF bytes)
 
 **Format Verification**:
 
@@ -149,7 +152,7 @@ TestValidateOutputPathEscape_Dangerous()
 "<a href='...'>link</a>" → "link text + URL"
 ```
 
-### 5. `logger_test.go` (9 tests, 247 lines)
+### 5. `internal/logger/logger_test.go` (9 tests)
 
 **Purpose**: Tests logging functionality and utility functions
 
@@ -165,7 +168,7 @@ TestValidateOutputPathEscape_Dangerous()
 - `TestShouldUseColor()` - NO_COLOR environment variable handling (3 cases)
 - `TestNewLogger()` - Logger constructor for all log levels (4 cases)
 
-### 6. `browser_test.go` (4 tests, 176 lines)
+### 6. `internal/browser/browser_test.go` (6 tests)
 
 **Purpose**: Tests browser detection and utility functions
 
@@ -180,8 +183,9 @@ TestValidateOutputPathEscape_Dangerous()
 - `TestDetectBrowserName_OrderOfPrecedence()` - Detection priority (2 cases)
 - `TestDetectBrowserName_ExtensionStripping()` - Cross-platform path handling (2 cases)
 - `TestDetectBrowserName_FallbackBehavior()` - Unknown browser handling (3 cases)
+- `internal/browser/page_test.go` (2 tests) - nil page and element guards
 
-### 7. `handlers_test.go` (4 tests, 198 lines)
+### 7. `internal/cli/handlers_test.go` (9 tests)
 
 **Purpose**: Tests handler utility functions
 
@@ -191,6 +195,15 @@ TestValidateOutputPathEscape_Dangerous()
 - `TestFormatTabLine()` - Tab list formatting (8 cases)
 - `TestFormatTabLine_Length()` - Line length verification
 - `TestDisplayTabList()` - Tab list display with sorting
+- `TestOutputPageInfo_SetsSlug()` - `--info` JSON slug filled at output time
+
+### 8. `internal/fetch/info_test.go` (5 tests)
+
+**Purpose**: Tests page metadata extraction (domain, JSON shape, IPv6 hosts)
+
+### 9. `internal/doctor/doctor_test.go` (17 tests)
+
+**Purpose**: Tests `--doctor` report formatting and collection
 
 ---
 
@@ -200,32 +213,32 @@ TestValidateOutputPathEscape_Dangerous()
 
 ```bash
 # Run all tests (unit + integration)
-go test
+go test ./...
 
 # Run all tests with verbose output
-go test -v
+go test -v ./...
 
 # Run only unit tests (fast, no browser)
-go test -short
+go test -short ./...
 
 # Run specific test function
-go test -run TestSlugifyTitle
+go test ./... -run TestSlugifyTitle
 
 # Run tests matching pattern
-go test -run "Test(Validate|Output)"
+go test ./... -run "Test(Validate|Output)"
 
 # Run with race detection
-go test -race
+go test -race ./...
 
 # Run with parallel execution
-go test -parallel 4
+go test ./... -parallel 4
 ```
 
 ### Unit Tests Only (Fast)
 
 ```bash
 # Run only unit tests (exclude browser integration)
-go test -run "^Test(Validate|Normalize|Slugify|Generate|Resolve|Extract|Output|Format|Logger)"
+go test ./... -run "^Test(Validate|Normalize|Slugify|Generate|Resolve|Extract|Output|Format|Logger)"
 
 # Approximate runtime: ~1 second
 ```
@@ -234,7 +247,7 @@ go test -run "^Test(Validate|Normalize|Slugify|Generate|Resolve|Extract|Output|F
 
 ```bash
 # Run only browser integration tests
-go test -run "^Test(Browser|Tab|Batch)"
+go test ./... -run "^Test(Browser|Tab|Batch)"
 
 # Approximate runtime: ~3-5 minutes (browser startup overhead)
 ```
@@ -242,7 +255,7 @@ go test -run "^Test(Browser|Tab|Batch)"
 ### Test Output
 
 ```
-$ go test -v
+$ go test -v ./...
 === RUN   TestSlugifyTitle
 --- PASS: TestSlugifyTitle (0.00s)
 === RUN   TestValidateFormat_Valid
@@ -251,7 +264,7 @@ $ go test -v
 --- PASS: TestBrowser_PDFFormat (3.97s)
 ...
 PASS
-ok      github.com/p3bot/snag    12.345s
+ok  	github.com/p3bot/snag/internal/cli	12.345s
 ```
 
 ---
@@ -262,22 +275,22 @@ ok      github.com/p3bot/snag    12.345s
 
 ```bash
 # Generate coverage profile
-go test -coverprofile=coverage.out
+go test -coverprofile=coverage.out ./...
 
 # View coverage summary
-go test -cover
+go test -cover ./...
 
 # Output:
 # PASS
 # coverage: 78.5% of statements
-# ok      github.com/p3bot/snag    1.234s
+# ok      github.com/p3bot/snag/internal/cli    1.234s
 ```
 
 ### Detailed Coverage by Function
 
 ```bash
 # Generate coverage profile
-go test -coverprofile=coverage.out
+go test -coverprofile=coverage.out ./...
 
 # View function-level coverage
 go tool cover -func=coverage.out
@@ -294,7 +307,7 @@ go tool cover -func=coverage.out
 
 ```bash
 # Generate and open HTML coverage report
-go test -coverprofile=coverage.out
+go test -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out
 
 # Opens browser with interactive visualization:
@@ -311,21 +324,21 @@ This includes integration code (handlers, main) which requires browser. Core bus
 
 ```bash
 # Generate current coverage
-go test -coverprofile=coverage.out
+go test -coverprofile=coverage.out ./...
 go tool cover -func=coverage.out | grep total
 # total: (statements) 19.7%
 ```
 
 ### Coverage by Module
 
-| Module        | Coverage | Functions   | Priority  | Notes                               |
-| ------------- | -------- | ----------- | --------- | ----------------------------------- |
-| `output.go`   | **~94%** | 5/5 tested  | ✅ High   | Core filename logic                 |
-| `validate.go` | **~96%** | 5/5 tested  | ✅ High   | Security & input validation         |
-| `logger.go`   | **~53%** | 5/7 tested  | ⚠️ Medium | Logging utilities                   |
-| `formats.go`  | **~60%** | 2/11 tested | ⚠️ Medium | Format conversion (unit tests only) |
-| `handlers.go` | **0%**   | 0/8 tested  | ⏸️ Low    | Requires browser integration        |
-| `main.go`     | **0%**   | 0/1 tested  | ⏸️ Low    | CLI setup (not critical)            |
+| Module              | Coverage | Functions   | Priority  | Notes                               |
+| ------------------- | -------- | ----------- | --------- | ----------------------------------- |
+| `internal/output`   | **~94%** | 5/5 tested  | ✅ High   | Core filename logic                 |
+| `internal/validate` | **~96%** | 5/5 tested  | ✅ High   | Security & input validation         |
+| `internal/logger`   | **~53%** | 5/7 tested  | ⚠️ Medium | Logging utilities                   |
+| `internal/format`   | **~60%** | 2/11 tested | ⚠️ Medium | Format conversion (unit tests only) |
+| `internal/cli`      | mixed    | helpers unit-tested; handlers via integration | ⏸️ Low    | Browser integration in `cli_test.go` |
+| `cmd/snag`          | **0%**   | 0/1 tested  | ⏸️ Low    | Thin entry (not critical)           |
 
 **Key Coverage Details**:
 
@@ -335,7 +348,8 @@ go tool cover -func=coverage.out | grep total
 - `ResolveConflict()`: 84.2%
 - `validateFormat()`: 100%
 - `validateDirectory()`: 94.7%
-- `validateOutputPathEscape()`: 87.5%
+- `validate.OutputPath()`: existing file vs missing/read-only directory
+- `validate.UserAgent()`: trim and newline sanitisation
 - `convertToMarkdown()`: 80.0%
 - `extractPlainText()`: 100%
 
@@ -490,20 +504,16 @@ My Section,Test description,./snag [options] <url>,stdout
 ### Test File Structure
 
 ```go
-package main
+package output
 
 import (
     "testing"
-    "io"
+
+    "github.com/p3bot/snag/internal/logger"
 )
 
-// Initialize logger to quiet mode for tests
 func init() {
-    logger = &Logger{
-        level:  LevelQuiet,
-        color:  false,
-        writer: io.Discard,
-    }
+    logger.SetDefault(logger.Discard())
 }
 
 // Test function naming: TestFunctionName or TestFunctionName_Scenario
@@ -657,10 +667,10 @@ jobs:
           go-version: "1.25"
 
       - name: Run unit tests
-        run: go test -short -v
+        run: go test -short ./... -v
 
       - name: Run all tests with coverage
-        run: go test -coverprofile=coverage.out -v
+        run: go test -coverprofile=coverage.out ./... -v
 
       - name: Upload coverage
         uses: codecov/codecov-action@v3
@@ -677,7 +687,7 @@ Create `.git/hooks/pre-commit`:
 # Run tests before commit
 
 echo "Running unit tests..."
-go test -short
+go test -short ./...
 
 if [ $? -ne 0 ]; then
     echo "Tests failed. Commit aborted."
@@ -699,7 +709,7 @@ chmod +x .git/hooks/pre-commit
 
 ```bash
 # Increase timeout for slow tests
-go test -timeout 30m
+go test -timeout 30m ./...
 ```
 
 ### Browser Tests Failing
@@ -709,10 +719,10 @@ go test -timeout 30m
 ./snag --list-tabs
 
 # Skip browser tests
-go test -short
+go test -short ./...
 
 # Run only unit tests
-go test -run "^Test(Validate|Output|Format|Logger)"
+go test ./... -run "^Test(Validate|Output|Format|Logger)"
 ```
 
 ### Coverage Not Updating
@@ -722,17 +732,17 @@ go test -run "^Test(Validate|Output|Format|Logger)"
 go clean -testcache
 
 # Re-run with coverage
-go test -coverprofile=coverage.out
+go test -coverprofile=coverage.out ./...
 ```
 
 ### Verbose Test Output
 
 ```bash
 # Show all test output
-go test -v
+go test -v ./...
 
 # Show only failing tests
-go test -v 2>&1 | grep -E "(FAIL|RUN.*FAIL)"
+go test -v ./... 2>&1 | grep -E "(FAIL|RUN.*FAIL)"
 ```
 
 ---
@@ -746,8 +756,8 @@ go test -v 2>&1 | grep -E "(FAIL|RUN.*FAIL)"
 - [ ] Use descriptive test name
 - [ ] Add test documentation comment
 - [ ] Update this document if needed
-- [ ] Run `go test` to verify
-- [ ] Run `go test -cover` to check coverage
+- [ ] Run `go test ./...` to verify
+- [ ] Run `go test -cover ./...` to check coverage
 
 ### Test Review Checklist
 
@@ -773,9 +783,9 @@ Snag has a robust testing infrastructure:
 **Quick Commands**:
 
 ```bash
-go test                          # Run all tests
-go test -short                   # Unit tests only
-go test -cover                   # With coverage
+go test ./...                    # Run all tests
+go test -short ./...             # Unit tests only
+go test -cover ./...             # With coverage
 go tool cover -html=coverage.out # View coverage
 ./test-interactive               # Manual testing
 ```

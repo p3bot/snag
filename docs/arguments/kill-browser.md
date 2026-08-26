@@ -190,12 +190,10 @@ snag --kill-browser --port 9999
 
 **Location:**
 
-- Flag definition: `main.go:103`, `main.go:221`
-- Flag priority chain: `main.go:396-424`
-- Handler: `handlers.go:handleKillBrowser()` (handlers.go:974-993)
-- Kill logic: `browser.go:KillBrowser()` (browser.go:616-785)
-  - `killBrowserOnPort()` (browser.go:630-697)
-  - `killAllBrowsers()` (browser.go:699-777)
+- Flag definition: `internal/cli/root.go` (`init`)
+- Flag priority chain: `internal/cli/root.go` (`runCobra`)
+- Handler: `internal/cli/handlers.go` (`handleKillBrowser`)
+- Kill logic: `internal/browser` (`KillBrowser`, `killBrowserOnPort`, `killAllBrowsers`)
 
 **How it works:**
 

@@ -4,28 +4,22 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package cli
 
 import (
 	"fmt"
-	"os"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
 
 	"github.com/spf13/cobra"
+
+	"github.com/p3bot/snag/internal/browser"
+	"github.com/p3bot/snag/internal/format"
+	"github.com/p3bot/snag/internal/logger"
+	"github.com/p3bot/snag/internal/validate"
 )
 
-var version = "dev"
-
-const (
-	FormatMarkdown = "md"
-	FormatHTML     = "html"
-	FormatText     = "text"
-	FormatPDF      = "pdf"
-	FormatPNG      = "png"
-)
+var Version = "dev"
 
 const (
 	ExitCodeSuccess   = 0
@@ -37,7 +31,6 @@ const (
 const (
 	MaxDisplayURLLength = 80
 	MaxTabLineLength    = 120
-	MaxSlugLength       = 80
 )
 
 const (
@@ -59,8 +52,8 @@ type Config struct {
 	UserDataDir   string
 }
 
-func (c *Config) BrowserOptions() BrowserOptions {
-	return BrowserOptions{
+func (c *Config) BrowserOptions() browser.BrowserOptions {
+	return browser.BrowserOptions{
 		Port:          c.Port,
 		ForceHeadless: c.ForceHeadless,
 		OpenBrowser:   c.OpenBrowser,
@@ -69,17 +62,38 @@ func (c *Config) BrowserOptions() BrowserOptions {
 	}
 }
 
+// browserOptionsFromFlags validates profile and user-agent flags, then builds
+// launch options through Config.BrowserOptions so every start path shares one mapping.
+func browserOptionsFromFlags(cmd *cobra.Command, openBrowser, forceHeadless bool) (browser.BrowserOptions, error) {
+	validatedUserDataDir := ""
+	if cmd.Flags().Changed("user-data-dir") {
+		validatedDir, err := validate.UserDataDir(userDataDir)
+		if err != nil {
+			return browser.BrowserOptions{}, err
+		}
+		validatedUserDataDir = validatedDir
+	}
+
+	cfg := &Config{
+		Port:          port,
+		ForceHeadless: forceHeadless,
+		OpenBrowser:   openBrowser,
+		UserAgent:     validate.UserAgent(userAgent, cmd.Flags().Changed("user-agent")),
+		UserDataDir:   validatedUserDataDir,
+	}
+	return cfg.BrowserOptions(), nil
+}
+
 var (
-	logger         *Logger
-	browserManager *BrowserManager
+	browserManager *browser.BrowserManager
 	browserMutex   sync.Mutex
 )
 
 var (
 	urlFile     string
-	output      string
+	flagOutput  string
 	outputDir   string
-	format      string
+	flagFormat  string
 	timeout     int
 	waitFor     string
 	port        int
@@ -90,7 +104,7 @@ var (
 	tab         string
 	allTabs     bool
 	killBrowser bool
-	doctor      bool
+	runDoctor   bool
 	showVersion bool
 	info        bool
 	verbose     bool
@@ -100,7 +114,7 @@ var (
 	userDataDir string
 )
 
-const helpTemplate = `USAGE:
+var helpTemplate = fmt.Sprintf(`USAGE:
   snag [options] URL...
 
 DESCRIPTION:
@@ -172,7 +186,7 @@ OPTIONS:
       --user-agent string      Custom user agent (bypass headless detection)
       --user-data-dir string   Custom Chromium/Chrome user data directory (for session isolation)
 
-      --timeout int            Page load timeout in seconds (default 30)
+      --timeout int            Page load timeout in seconds (default %d)
   -w, --wait-for string        Wait for CSS selector before extracting content
 
       --doctor                 Display comprehensive diagnostic information
@@ -184,7 +198,7 @@ OPTIONS:
 
   -h, --help                   help for snag
   -v, --version                version for snag
-`
+`, DefaultTimeout)
 
 var rootCmd = &cobra.Command{
 	Use:          "snag [options] URL...",
@@ -196,15 +210,15 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.Flags().StringVar(&urlFile, "url-file", "", "Read URLs from file (one per line, supports comments)")
-	rootCmd.Flags().StringVarP(&output, "output", "o", "", "Save output to file instead of stdout")
+	rootCmd.Flags().StringVarP(&flagOutput, "output", "o", "", "Save output to file instead of stdout")
 	rootCmd.Flags().StringVarP(&outputDir, "output-dir", "d", "", "Save files with auto-generated names to directory")
-	rootCmd.Flags().StringVarP(&format, "format", "f", FormatMarkdown, "Output format: md | html | text | pdf | png")
+	rootCmd.Flags().StringVarP(&flagFormat, "format", "f", format.Markdown, "Output format: md | html | text | pdf | png")
 	rootCmd.Flags().StringVarP(&waitFor, "wait-for", "w", "", "Wait for CSS selector before extracting content")
 	rootCmd.Flags().StringVarP(&tab, "tab", "t", "", "Fetch from existing tab by pattern (tab number or string)")
 	rootCmd.Flags().StringVar(&userAgent, "user-agent", "", "Custom user agent (bypass headless detection)")
 	rootCmd.Flags().StringVar(&userDataDir, "user-data-dir", "", "Custom Chromium/Chrome user data directory (for session isolation)")
 
-	rootCmd.Flags().IntVar(&timeout, "timeout", 30, "Page load timeout in seconds")
+	rootCmd.Flags().IntVar(&timeout, "timeout", DefaultTimeout, "Page load timeout in seconds")
 	rootCmd.Flags().IntVarP(&port, "port", "p", 9222, "Chromium/Chrome remote debugging port")
 
 	rootCmd.Flags().BoolVarP(&closeTab, "close-tab", "c", false, "Close the browser tab after fetching content")
@@ -213,7 +227,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&listTabs, "list-tabs", "l", false, "List all open tabs in the browser")
 	rootCmd.Flags().BoolVarP(&allTabs, "all-tabs", "a", false, "Process all open browser tabs (saves with auto-generated filenames)")
 	rootCmd.Flags().BoolVarP(&killBrowser, "kill-browser", "k", false, "Kill browser processes with remote debugging enabled")
-	rootCmd.Flags().BoolVar(&doctor, "doctor", false, "Display comprehensive diagnostic information")
+	rootCmd.Flags().BoolVar(&runDoctor, "doctor", false, "Display comprehensive diagnostic information")
 	rootCmd.Flags().BoolVarP(&showVersion, "version", "v", false, "Display version information")
 	rootCmd.Flags().BoolVarP(&info, "info", "i", false, "Output page metadata as JSON (title, URL, domain, slug, timestamp)")
 	rootCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging output")
@@ -223,31 +237,6 @@ func init() {
 	rootCmd.MarkFlagsMutuallyExclusive("quiet", "verbose", "debug")
 
 	rootCmd.SetHelpTemplate(helpTemplate)
-}
-
-func main() {
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		sig := <-sigChan
-		fmt.Fprintf(os.Stderr, "\nReceived %v, cleaning up...\n", sig)
-
-		browserMutex.Lock()
-		if browserManager != nil {
-			browserManager.Close()
-		}
-		browserMutex.Unlock()
-
-		if sig == os.Interrupt {
-			os.Exit(ExitCodeInterrupt)
-		}
-		os.Exit(ExitCodeSIGTERM)
-	}()
-
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(ExitCodeError)
-	}
 }
 
 func validateFlagCombinations(cmd *cobra.Command, hasURLs bool, hasMultipleURLs bool) error {
@@ -281,7 +270,7 @@ func validateFlagCombinations(cmd *cobra.Command, hasURLs bool, hasMultipleURLs 
 		return fmt.Errorf("conflicting flags: --force-headless and --all-tabs")
 	}
 
-	outputFile := strings.TrimSpace(output)
+	outputFile := strings.TrimSpace(flagOutput)
 	outDir := strings.TrimSpace(outputDir)
 
 	if outputFile != "" && outDir != "" {
@@ -336,20 +325,20 @@ func validateFlagCombinations(cmd *cobra.Command, hasURLs bool, hasMultipleURLs 
 }
 
 func runCobra(cmd *cobra.Command, args []string) error {
-	level := LevelNormal
+	level := logger.LevelNormal
 	if debug {
-		level = LevelDebug
+		level = logger.LevelDebug
 	} else if verbose {
-		level = LevelVerbose
+		level = logger.LevelVerbose
 	} else if quiet || info {
-		level = LevelQuiet
+		level = logger.LevelQuiet
 	}
 
-	logger = NewLogger(level)
+	logger.SetDefault(logger.New(level))
 
 	var urls []string
 
-	outputFile := strings.TrimSpace(output)
+	outputFile := strings.TrimSpace(flagOutput)
 	outDir := strings.TrimSpace(outputDir)
 
 	// Load URLs from file if specified
@@ -368,12 +357,12 @@ func runCobra(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if doctor {
+	if runDoctor {
 		return handleDoctor(cmd)
 	}
 
 	if showVersion {
-		fmt.Printf("snag version %s\n", version)
+		fmt.Printf("snag version %s\n", Version)
 		fmt.Println("Repository: https://github.com/p3bot/snag")
 		fmt.Println("Report issues: https://github.com/p3bot/snag/issues/new")
 		return nil
@@ -455,35 +444,24 @@ func runCobra(cmd *cobra.Command, args []string) error {
 		if cmd.Flags().Changed("wait-for") {
 			logger.Warning("--wait-for ignored with --open-browser (no content fetching)")
 		}
-		if cmd.Flags().Changed("user-agent") {
-			logger.Warning("--user-agent ignored with --open-browser (no navigation)")
-		}
 		if closeTab {
 			logger.Warning("--close-tab ignored with --open-browser (no content fetching)")
 		}
 
-		validatedUserDataDir := ""
-		if cmd.Flags().Changed("user-data-dir") {
-			validatedDir, err := validateUserDataDir(userDataDir)
-			if err != nil {
-				return err
-			}
-			validatedUserDataDir = validatedDir
+		opts, err := browserOptionsFromFlags(cmd, true, false)
+		if err != nil {
+			return err
 		}
 
 		logger.Info("Opening browser...")
-		bm := NewBrowserManager(BrowserOptions{
-			Port:        port,
-			OpenBrowser: true,
-			UserDataDir: validatedUserDataDir,
-		})
+		bm := browser.NewBrowserManager(opts)
 		return bm.OpenBrowserOnly()
 	}
 
 	if len(urls) == 0 {
 		logger.Error("No URLs provided")
 		logger.ErrorWithSuggestion("Provide URLs as arguments or use --url-file", "snag <url> or snag --url-file urls.txt")
-		return ErrNoValidURLs
+		return validate.ErrNoValidURLs
 	}
 
 	if openBrowser && len(urls) > 0 {
@@ -493,26 +471,26 @@ func runCobra(cmd *cobra.Command, args []string) error {
 	if len(urls) == 1 {
 		urlStr := urls[0]
 
-		validatedURL, err := validateURL(urlStr)
+		validatedURL, err := validate.URL(urlStr)
 		if err != nil {
 			return err
 		}
 
 		logger.Verbose("Target URL: %s", validatedURL)
 
-		outputFormat := normalizeFormat(format)
+		outputFormat := validate.NormalizeFormat(flagFormat)
 
 		validatedUserDataDir := ""
 		if cmd.Flags().Changed("user-data-dir") {
-			validatedDir, err := validateUserDataDir(userDataDir)
+			validatedDir, err := validate.UserDataDir(userDataDir)
 			if err != nil {
 				return err
 			}
 			validatedUserDataDir = validatedDir
 		}
 
-		validatedUserAgent := validateUserAgent(userAgent, cmd.Flags().Changed("user-agent"))
-		validatedWaitFor := validateWaitFor(waitFor, cmd.Flags().Changed("wait-for"))
+		validatedUserAgent := validate.UserAgent(userAgent, cmd.Flags().Changed("user-agent"))
+		validatedWaitFor := validate.WaitFor(waitFor, cmd.Flags().Changed("wait-for"))
 
 		config := &Config{
 			URL:           validatedURL,
@@ -531,23 +509,23 @@ func runCobra(cmd *cobra.Command, args []string) error {
 
 		logger.Debug("Config: format=%s, timeout=%d, port=%d", config.Format, config.Timeout, config.Port)
 
-		if err := validateFormat(config.Format); err != nil {
+		if err := validate.Format(config.Format); err != nil {
 			return err
 		}
 
-		if err := validateTimeout(config.Timeout); err != nil {
+		if err := validate.Timeout(config.Timeout); err != nil {
 			return err
 		}
 
-		if err := validatePort(config.Port); err != nil {
+		if err := validate.Port(config.Port); err != nil {
 			return err
 		}
 
 		if cmd.Flags().Changed("output") || config.OutputFile != "" {
-			if err := validateOutputPath(config.OutputFile); err != nil {
+			if err := validate.OutputPath(config.OutputFile); err != nil {
 				return err
 			}
-			checkExtensionMismatch(config.OutputFile, config.Format)
+			validate.CheckExtensionMismatch(config.OutputFile, config.Format)
 		}
 
 		if cmd.Flags().Changed("output-dir") && config.OutputDir == "" {
@@ -555,7 +533,7 @@ func runCobra(cmd *cobra.Command, args []string) error {
 		}
 
 		if config.OutputDir != "" {
-			if err := validateDirectory(config.OutputDir); err != nil {
+			if err := validate.Directory(config.OutputDir); err != nil {
 				return err
 			}
 		}

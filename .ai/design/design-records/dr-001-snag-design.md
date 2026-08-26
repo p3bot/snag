@@ -50,7 +50,7 @@ Rejected alternatives: `web2md` (misleading with --html), `grab` (too generic), 
 | 10  | Browser Discovery         | rod's `launcher.LookPath()` (Chromium-based only)               |
 | 11  | Logging Strategy          | Custom logger (4 levels, colors, emojis)                        |
 | 12  | Error Handling            | Exit 0/1, sentinel errors, clear messages                       |
-| 13  | Project Structure         | Flat structure at root                                          |
+| 13  | Project Structure         | `cmd/snag` plus `internal/` packages                            |
 | 14  | Testing Strategy          | Integration tests with real browser                             |
 | 15  | Flag Assignment           | `-t` moved from `--timeout` to `--tab` (more frequently used)   |
 | 16  | Tab Indexing              | 1-based indexing (first tab is [1], not [0])                    |
@@ -58,7 +58,7 @@ Rejected alternatives: `web2md` (misleading with --html), `grab` (too generic), 
 | 18  | Case Sensitivity          | Case-insensitive matching for all modes                         |
 | 19  | Regex Support             | Full regex patterns (not just wildcards)                        |
 | 20  | Pattern Simplicity        | No regex detection needed (try all methods in order)            |
-| 21  | Multiple Matches          | First match wins (predictable, simple)                          |
+| 21  | Multiple Matches          | All matches at the first successful stage (see decision 30)     |
 | 22  | Performance               | Single-pass page.Info() caching (3x improvement)                |
 | 23  | Format Name Normalization | `md` (not "markdown") for consistency with file extensions      |
 | 24  | Format Alias Support      | Case-insensitive formats with aliases (markdown→md, txt→text)   |
@@ -292,14 +292,14 @@ snag -t "github"                         # Contains "github"
 
 **Technical Implementation:**
 
-- New `TabInfo` struct (index, URL, title, ID) - browser.go:49-55
-- `ListTabs()` - Get all tabs from browser - browser.go:404-434
-- `GetTabByIndex(index int)` - Select tab by 1-based index - browser.go:434-463
-- `GetTabByPattern(pattern string)` - Progressive fallthrough matching with caching - browser.go:473-544
-- `handleListTabs()` - CLI handler for --list-tabs - main.go:345-383
-- `handleTabFetch()` - CLI handler for --tab - main.go:412-534
+- New `TabInfo` struct (index, URL, title, ID) - `internal/browser`
+- `ListTabs()` - Get all tabs from browser - `internal/browser`
+- `GetTabByIndex(index int)` - Select tab by 1-based index - `internal/browser`
+- `GetTabsByPattern(pattern string)` - Progressive fallthrough matching with caching - `internal/browser`
+- `handleListTabs()` - CLI handler for --list-tabs - `internal/cli/handlers.go`
+- `handleTabFetch()` - CLI handler for --tab - `internal/cli/handlers.go`
 - Browser requirement: Existing Chrome instance with remote debugging
-- Integration tests: cli_test.go (13 tab-related tests)
+- Integration tests: `internal/cli/cli_test.go` (13 tab-related tests)
 
 **Rationale:**
 
@@ -867,20 +867,20 @@ $ snag https://example.com
 
 ### 13. Project Structure
 
-- **Decision**: Start with flat structure at repository root, refactor later if needed
+- **Decision**: `cmd/snag` plus `internal/` packages, matching tk. A root `package main` grab-bag blocked splitting Cobra wiring from Rod and HTML conversion.
 - **Structure**:
   ```
   snag/
-  ├── main.go              # CLI entry point (Cobra setup)
-  ├── browser.go           # Browser management (rod)
-  ├── fetch.go             # Page fetching logic
-  ├── convert.go           # HTML to Markdown conversion
-  ├── logger.go            # Custom logger
-  ├── errors.go            # Sentinel errors
-  ├── testdata/            # Test fixtures
-  │   ├── simple.html
-  │   └── auth-page.html
-  ├── integration_test.go  # Real browser tests
+  ├── cmd/snag/main.go     # Thin entry: Execute, signal/error exit
+  ├── internal/cli/        # Cobra, flags, handlers, signals
+  ├── internal/browser/    # Rod launch, connect, tabs
+  ├── internal/fetch/      # Navigation and HTML extraction
+  ├── internal/format/     # md/html/text/pdf/png conversion
+  ├── internal/output/     # Filename generation
+  ├── internal/validate/   # URL and flag validation
+  ├── internal/logger/     # Four-level stderr logger
+  ├── internal/doctor/     # --doctor diagnostics
+  ├── testdata/            # Shared fixtures
   ├── go.mod
   ├── go.sum
   ├── LICENSE
@@ -888,26 +888,17 @@ $ snag https://example.com
   ```
 - **Build Command**:
   ```bash
-  go build -o snag
+  go build -o snag ./cmd/snag
+  go build -ldflags "-X github.com/p3bot/snag/internal/cli.Version=1.0.0" -o snag ./cmd/snag
+  go install github.com/p3bot/snag/cmd/snag@latest
   ```
-- **Why Flat Structure**:
-  - Simple and easy to navigate
-  - Perfect for focused single-binary CLI
-  - No over-engineering for small codebase
-  - Simpler Homebrew formula (`go build` vs `go build ./cmd/snag`)
-  - Easy to refactor to `internal/` packages later if needed
-  - Matches Go philosophy: "start simple, refactor as needed"
-- **When to Refactor to internal/**:
-  - Code grows beyond ~2000 lines
-  - Features add significant complexity
-  - Multiple contributors need clear boundaries
-  - Want to prevent external imports
+- **Why this layout**:
+  - `cmd/snag` has no flag parsing, browser logic, or configuration
+  - `internal/cli` does not import Rod; handlers talk to browser/fetch
+  - Domain packages can evolve without dumping everything into cli
+  - Same install/build shape as tk (`go install .../cmd/<name>@latest`)
 - **No pkg/ Directory**: Not building a reusable library
-- **Distribution Benefits**:
-  - ✅ Simpler build commands
-  - ✅ Clearer for contributors (main.go in root)
-  - ✅ Less boilerplate in Homebrew formula
-  - ✅ Standard for single-binary tools
+- **No config files**: Unchanged (decision elsewhere in this record)
 
 ### 14. Testing Strategy
 
@@ -1001,8 +992,8 @@ $ snag https://example.com
   - Simple patterns work automatically (no need to learn regex)
   - Power users can use full regex when needed
   - Forgiving approach: "try everything before failing"
-- **First match wins**: If multiple tabs match, return first one (predictable, simple)
-- **Implementation**: browser.go:473-544 (GetTabByPattern function)
+- **First match wins**: Original plan. Superseded: all matches at the first successful stage are returned (decision 30)
+- **Implementation**: `internal/browser` (`GetTabsByPattern`)
 
 ### 18. Case Sensitivity
 
@@ -1055,7 +1046,7 @@ $ snag https://example.com
 
 ### 22. Performance Optimization
 
-- **Decision**: Single-pass page.Info() caching in GetTabByPattern()
+- **Decision**: Single-pass page.Info() caching in GetTabsByPattern()
 - **Problem Identified**: Multiple `page.Info()` calls repeated for same pages (network round-trips)
 - **Solution**: Cache page.Info() results once, iterate over cached data
 - **Impact**: 3x reduction in network calls
@@ -1063,15 +1054,15 @@ $ snag https://example.com
   - After: N calls for N tabs (single pass to build cache, then iterate)
   - Example: 10 tabs = 30 calls → 10 calls
 - **Implementation**:
-  - Local `pageCache` struct stores page, URL, and index
-  - Single loop at browser.go:487-507
-  - All pattern matching operates on cached data
+  - `pageWithInfo` holds page, URL, title, and ID
+  - `getSortedPagesWithInfo` does one `page.Info()` pass, then sorts (shared by list, index, pattern, and range)
+  - `GetTabsByPattern` matches against that slice (exact, then substring, then regex)
 - **Rationale**:
   - Identified during code review after initial implementation
   - Significant performance improvement with minimal code complexity
   - Network calls are expensive compared to memory operations
   - Maintains exact same behavior, just faster
-- **Code Location**: browser.go:487-507 (GetTabByPattern function)
+- **Code Location**: `internal/browser` (`GetTabsByPattern`)
 
 **See Also**: For complete tab selection specification and examples, see [arguments/tab.md](arguments/tab.md) and [arguments/list-tabs.md](arguments/list-tabs.md)
 
@@ -1209,7 +1200,7 @@ $ snag https://example.com
   snag -t 2-2                     # Single tab (equivalent to --tab 2)
   ```
 - **Integration**: Fits naturally into existing progressive fallthrough pattern matching as highest priority check
-- **Code Location**: Handler in `main.go` (range detection before pattern matching)
+- **Code Location**: Handler in `internal/cli/handlers.go` (range detection before pattern matching)
 
 **See Also**: For complete tab range specification and examples, see [arguments/tab.md](arguments/tab.md)
 
@@ -1378,8 +1369,8 @@ $ snag https://example.com
   - Users relying on first-match can use more specific patterns
   - Or use `--tab <index>` for exact tab selection
 - **Code Location**:
-  - Handler: `main.go` (handleTabFetch function)
-  - Pattern matching: `browser.go` (GetTabsByPattern function - returns `[]*Tab`)
+  - Handler: `internal/cli/handlers.go` (`handleTabFetch`)
+  - Pattern matching: `internal/browser` (`GetTabsByPattern`)
 
 **See Also**: For complete pattern matching specification, see [arguments/tab.md](arguments/tab.md)
 
@@ -1421,10 +1412,10 @@ $ snag https://example.com
   - **Confirmation prompt**: Rejected - Adds complexity, can be added later with `--confirm` flag if needed
   - **Process tree tracking**: Rejected - Added complexity for minimal benefit, `kill -9` sufficient
 - **Code Location**:
-  - Flag definition: `main.go:103`, `main.go:221`
-  - Priority chain: `main.go:396-424`
-  - Handler: `handlers.go:handleKillBrowser()` (handlers.go:974-993)
-  - Kill logic: `browser.go:KillBrowser()` (browser.go:616-785)
+  - Flag definition: `internal/cli/root.go` (`init`)
+  - Priority chain: `internal/cli/root.go` (`runCobra`)
+  - Handler: `internal/cli/handlers.go` (`handleKillBrowser`)
+  - Kill logic: `internal/browser` (`KillBrowser`)
 - **Examples**:
 
   ```bash
@@ -1474,10 +1465,10 @@ $ snag https://example.com
   - **Connection check**: 3-second timeout per port to avoid hanging
   - **Output format**: Unicode/emoji formatting (✓/✗) with clear sections
 - **Implementation Strategy**:
-  - New file `doctor.go` with `DoctorReport` struct, `CollectDoctorInfo()`, `Print()` methods
-  - Extended `browser.go` with `GetBrowserVersion()` and `GetProfilePath()` methods
-  - Handler `handleDoctor()` in `handlers.go`
-  - Priority chain in `main.go` ensures correct flag precedence
+  - New file `internal/doctor/doctor.go` with `DoctorReport` struct, `CollectDoctorInfo()`, `Print()` methods
+  - Extended `internal/browser` with `GetBrowserVersion()` and `GetProfilePath()` methods
+  - Handler `handleDoctor()` in `internal/cli/handlers.go`
+  - Priority chain in `internal/cli/root.go` ensures correct flag precedence
 - **Use Cases**:
   - **Troubleshooting**: "snag isn't working" → "Run `snag --doctor` and share output"
   - **Environment validation**: Check browser installation, version, and connectivity
@@ -1489,11 +1480,11 @@ $ snag https://example.com
   - More detailed network/system diagnostics if needed
   - Integration with `--report-issue` flag for auto-populating GitHub issues
 - **Code Location**:
-  - Flag definition: `main.go:102`, `main.go:220`
-  - Priority chain: `main.go:396-424`
-  - Handler: `handlers.go:handleDoctor()`
-  - Doctor logic: `doctor.go:DoctorReport`, `CollectDoctorInfo()`, `Print()`
-  - Browser extensions: `browser.go:GetBrowserVersion()`, `GetProfilePath()`
+  - Flag definition: `internal/cli/root.go` (`init`)
+  - Priority chain: `internal/cli/root.go` (`runCobra`)
+  - Handler: `internal/cli/handlers.go` (`handleDoctor`)
+  - Doctor logic: `internal/doctor` (`DoctorReport`, `CollectDoctorInfo`, `Print`)
+  - Browser extensions: `internal/browser` (`GetBrowserVersion`, `GetProfilePath`)
 - **Examples**:
 
   ```bash

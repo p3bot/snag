@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package fetch
 
 import (
 	"encoding/json"
@@ -38,6 +38,11 @@ func TestExtractDomain(t *testing.T) {
 		{"file:///local/path", "", "file URL"},
 		{"https://localhost:3000", "localhost", "localhost"},
 		{"https://127.0.0.1:8080", "127.0.0.1", "IP address"},
+
+		{"https://[::1]", "::1", "IPv6 loopback"},
+		{"https://[::1]:8080", "::1", "IPv6 loopback with port"},
+		{"https://[2001:db8::1]/path", "2001:db8::1", "IPv6 documentation address"},
+		{"https://[2001:db8::1]:443/path", "2001:db8::1", "IPv6 with port and path"},
 	}
 
 	for _, tt := range tests {
@@ -153,29 +158,6 @@ func TestPageInfoEmptyTitle(t *testing.T) {
 
 	if parsed.Title != "" {
 		t.Errorf("Expected empty title, got %q", parsed.Title)
-	}
-}
-
-// TestPageInfoSpecialCharacters tests handling of special characters in title
-func TestPageInfoSpecialCharacters(t *testing.T) {
-	tests := []struct {
-		title        string
-		expectedSlug string
-		desc         string
-	}{
-		{"Hello & World", "hello-world", "ampersand"},
-		{"Test <script>alert(1)</script>", "test-script-alert-1-script", "HTML tags"},
-		{"Page \"with\" quotes", "page-with-quotes", "quotes"},
-		{"Line\nBreak", "line-break", "newline"},
-		{"Tab\tCharacter", "tab-character", "tab"},
-	}
-
-	for _, tt := range tests {
-		slug := SlugifyTitle(tt.title, MaxSlugLength)
-		if slug != tt.expectedSlug {
-			t.Errorf("SlugifyTitle(%q) [%s] = %q, expected %q",
-				tt.title, tt.desc, slug, tt.expectedSlug)
-		}
 	}
 }
 

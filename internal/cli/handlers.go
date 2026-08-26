@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package cli
 
 import (
 	"bufio"
@@ -17,12 +17,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-rod/rod"
 	"github.com/spf13/cobra"
+
+	"github.com/p3bot/snag/internal/browser"
+	"github.com/p3bot/snag/internal/doctor"
+	"github.com/p3bot/snag/internal/fetch"
+	"github.com/p3bot/snag/internal/format"
+	"github.com/p3bot/snag/internal/logger"
+	"github.com/p3bot/snag/internal/output"
+	"github.com/p3bot/snag/internal/validate"
 )
 
 func snag(config *Config) error {
-	bm := NewBrowserManager(config.BrowserOptions())
+	bm := browser.NewBrowserManager(config.BrowserOptions())
 
 	browserMutex.Lock()
 	browserManager = bm
@@ -38,9 +45,9 @@ func snag(config *Config) error {
 		browserMutex.Unlock()
 	}()
 
-	_, err := bm.Connect()
+	err := bm.Connect()
 	if err != nil {
-		if errors.Is(err, ErrBrowserNotFound) {
+		if errors.Is(err, browser.ErrBrowserNotFound) {
 			logger.Error("No Chromium-based browser found")
 			logger.ErrorWithSuggestion(
 				"Install Chrome, Chromium, Edge, or Brave to use snag",
@@ -59,9 +66,9 @@ func snag(config *Config) error {
 		defer bm.ClosePage(page)
 	}
 
-	fetcher := NewPageFetcher(page, config.Timeout)
+	fetcher := fetch.NewPageFetcher(page, config.Timeout)
 
-	_, err = fetcher.Fetch(FetchOptions{
+	_, err = fetcher.Fetch(fetch.FetchOptions{
 		URL:     config.URL,
 		Timeout: config.Timeout,
 		WaitFor: config.WaitFor,
@@ -71,7 +78,7 @@ func snag(config *Config) error {
 	}
 
 	if config.OutputDir != "" {
-		info, err := page.Info()
+		info, err := page.Meta()
 		if err != nil {
 			return fmt.Errorf("failed to get page info: %w", err)
 		}
@@ -87,8 +94,8 @@ func snag(config *Config) error {
 
 	// For binary formats without -o or -d: auto-generate filename in current directory
 	// Binary formats (PDF, PNG) should NEVER output to stdout (corrupts terminal)
-	if config.OutputFile == "" && (config.Format == FormatPDF || config.Format == FormatPNG) {
-		info, err := page.Info()
+	if config.OutputFile == "" && (config.Format == format.PDF || config.Format == format.PNG) {
+		info, err := page.Meta()
 		if err != nil {
 			return fmt.Errorf("failed to get page info: %w", err)
 		}
@@ -103,30 +110,14 @@ func snag(config *Config) error {
 		logger.Info("Filename: %s", config.OutputFile)
 	}
 
-	return processPageContent(page, config.Format, config.OutputFile)
-}
-
-func processPageContent(page *rod.Page, format string, outputFile string) error {
-	converter := NewContentConverter(format)
-
-	// Handle binary formats (PDF, PNG) that need the page object
-	if format == FormatPDF || format == FormatPNG {
-		return converter.ProcessPage(page, outputFile)
-	}
-
-	html, err := page.HTML()
-	if err != nil {
-		return fmt.Errorf("failed to extract HTML: %w", err)
-	}
-
-	return converter.Process(html, outputFile)
+	return format.ProcessContent(page, config.Format, config.OutputFile)
 }
 
 func generateOutputFilename(title, url, format string,
 	timestamp time.Time, outputDir string) (string, error) {
-	filename := GenerateFilename(title, format, timestamp, url)
+	filename := output.GenerateFilename(title, format, timestamp, url)
 
-	finalFilename, err := ResolveConflict(outputDir, filename)
+	finalFilename, err := output.ResolveConflict(outputDir, filename)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve filename conflict: %w", err)
 	}
@@ -134,8 +125,8 @@ func generateOutputFilename(title, url, format string,
 	return filepath.Join(outputDir, finalFilename), nil
 }
 
-func connectToExistingBrowser(port int) (*BrowserManager, error) {
-	bm := NewBrowserManager(BrowserOptions{
+func connectToExistingBrowser(port int) (*browser.BrowserManager, error) {
+	bm := browser.NewBrowserManager(browser.BrowserOptions{
 		Port: port,
 	})
 
@@ -143,16 +134,13 @@ func connectToExistingBrowser(port int) (*BrowserManager, error) {
 	browserManager = bm
 	browserMutex.Unlock()
 
-	browser, err := bm.connectToExisting()
-	if err != nil {
+	if err := bm.ConnectExisting(); err != nil {
 		browserMutex.Lock()
 		browserManager = nil
 		browserMutex.Unlock()
 		logger.Error("No browser found. Try running 'snag --open-browser' first")
-		return nil, ErrNoBrowserRunning
+		return nil, browser.ErrNoBrowserRunning
 	}
-
-	bm.browser = browser
 
 	return bm, nil
 }
@@ -204,7 +192,7 @@ func formatTabLine(index int, title, url string, maxLength int, verbose bool) st
 	return fmt.Sprintf("%s%s (%s)", prefix, displayURL, title)
 }
 
-func displayTabList(tabs []TabInfo, w io.Writer, verbose bool) {
+func displayTabList(tabs []browser.TabInfo, w io.Writer, verbose bool) {
 	if len(tabs) == 0 {
 		fmt.Fprintf(w, "No tabs open in browser\n")
 		return
@@ -239,7 +227,7 @@ func handleListTabs(cmd *cobra.Command) error {
 }
 
 func handleAllTabs(cmd *cobra.Command) error {
-	outputFormat := normalizeFormat(format)
+	outputFormat := validate.NormalizeFormat(flagFormat)
 	outDir := strings.TrimSpace(outputDir)
 	if outDir == "" {
 		outDir = "."
@@ -255,15 +243,15 @@ func handleAllTabs(cmd *cobra.Command) error {
 		logger.Warning("--timeout is ignored without --wait-for when using --all-tabs")
 	}
 
-	if err := validateFormat(outputFormat); err != nil {
+	if err := validate.Format(outputFormat); err != nil {
 		return err
 	}
 
-	if err := validateTimeout(timeout); err != nil {
+	if err := validate.Timeout(timeout); err != nil {
 		return err
 	}
 
-	if err := validateDirectory(outDir); err != nil {
+	if err := validate.Directory(outDir); err != nil {
 		return err
 	}
 
@@ -295,7 +283,7 @@ func handleAllTabs(cmd *cobra.Command) error {
 	failureCount := 0
 
 	for _, tab := range tabs {
-		if isNonFetchableURL(tab.URL) {
+		if validate.IsNonFetchableURL(tab.URL) {
 			logger.Warning("[%d/%d] Skipping tab: %s (not fetchable)", tab.Index, len(tabs), tab.URL)
 			continue
 		}
@@ -310,7 +298,7 @@ func handleAllTabs(cmd *cobra.Command) error {
 		}
 
 		if waitFor != "" {
-			err := waitForSelector(page, waitFor, time.Duration(timeout)*time.Second)
+			err := fetch.WaitForSelector(page, waitFor, time.Duration(timeout)*time.Second)
 			if err != nil {
 				logger.Error("[%d/%d] Wait failed: %v", tab.Index, len(tabs), err)
 				failureCount++
@@ -328,7 +316,7 @@ func handleAllTabs(cmd *cobra.Command) error {
 			continue
 		}
 
-		if err := processPageContent(page, outputFormat, outputPath); err != nil {
+		if err := format.ProcessContent(page, outputFormat, outputPath); err != nil {
 			logger.Error("[%d/%d] Failed to process content: %v", tab.Index, len(tabs), err)
 			failureCount++
 			if closeTab {
@@ -378,23 +366,23 @@ func handleTabFetch(cmd *cobra.Command) error {
 	}
 
 	// Validate early before expensive browser connection
-	outputFormat := normalizeFormat(format)
-	validatedWaitFor := validateWaitFor(waitFor, cmd.Flags().Changed("wait-for"))
-	outputFile := strings.TrimSpace(output)
+	outputFormat := validate.NormalizeFormat(flagFormat)
+	validatedWaitFor := validate.WaitFor(waitFor, cmd.Flags().Changed("wait-for"))
+	outputFile := strings.TrimSpace(flagOutput)
 
-	if err := validateFormat(outputFormat); err != nil {
+	if err := validate.Format(outputFormat); err != nil {
 		return err
 	}
 
-	if err := validateTimeout(timeout); err != nil {
+	if err := validate.Timeout(timeout); err != nil {
 		return err
 	}
 
 	if outputFile != "" {
-		if err := validateOutputPath(outputFile); err != nil {
+		if err := validate.OutputPath(outputFile); err != nil {
 			return err
 		}
-		checkExtensionMismatch(outputFile, outputFormat)
+		validate.CheckExtensionMismatch(outputFile, outputFormat)
 	}
 
 	bm, err := connectToExistingBrowser(port)
@@ -425,16 +413,16 @@ func handleTabFetch(cmd *cobra.Command) error {
 		}
 	}
 
-	var page *rod.Page
+	var page *browser.Page
 	var multipleMatches bool
-	var matchedPages []*rod.Page
+	var matchedPages []*browser.Page
 
 	// Try parsing as tab index
 	if tabIndex, err := strconv.Atoi(tabValue); err == nil {
 		logger.Verbose("Fetching from tab index: %d", tabIndex)
 		page, err = bm.GetTabByIndex(tabIndex)
 		if err != nil {
-			if errors.Is(err, ErrTabIndexInvalid) {
+			if errors.Is(err, browser.ErrTabIndexInvalid) {
 				logger.Error("Tab index out of range")
 				logger.Info("Run 'snag --list-tabs' to see available tabs")
 			}
@@ -446,7 +434,7 @@ func handleTabFetch(cmd *cobra.Command) error {
 		logger.Verbose("Fetching from tab matching pattern: %s", tabValue)
 		matchedPages, err = bm.GetTabsByPattern(tabValue)
 		if err != nil {
-			if errors.Is(err, ErrNoTabMatch) {
+			if errors.Is(err, browser.ErrNoTabMatch) {
 				logger.Error("No tab matches pattern '%s'", tabValue)
 				logger.Info("Run 'snag --list-tabs' to see available tabs")
 			}
@@ -472,7 +460,7 @@ func handleTabFetch(cmd *cobra.Command) error {
 	}
 
 	// Single tab fetch (validation already done earlier)
-	info, err := page.Info()
+	info, err := page.Meta()
 	if err != nil {
 		return fmt.Errorf("failed to get page info: %w", err)
 	}
@@ -480,14 +468,14 @@ func handleTabFetch(cmd *cobra.Command) error {
 	logger.Info("Fetching content from: %s", info.URL)
 
 	if validatedWaitFor != "" {
-		err := waitForSelector(page, validatedWaitFor, time.Duration(timeout)*time.Second)
+		err := fetch.WaitForSelector(page, validatedWaitFor, time.Duration(timeout)*time.Second)
 		if err != nil {
 			return err
 		}
 	}
 
 	// For binary formats without -o or -d: auto-generate filename
-	if outputFile == "" && (outputFormat == FormatPDF || outputFormat == FormatPNG) {
+	if outputFile == "" && (outputFormat == format.PDF || outputFormat == format.PNG) {
 		outputFile, err = generateOutputFilename(
 			info.Title, info.URL, outputFormat,
 			time.Now(), ".",
@@ -498,10 +486,36 @@ func handleTabFetch(cmd *cobra.Command) error {
 		logger.Info("Filename: %s", outputFile)
 	}
 
-	return processPageContent(page, outputFormat, outputFile)
+	err = format.ProcessContent(page, outputFormat, outputFile)
+	if closeTab {
+		closeExistingTab(page)
+	}
+	return err
 }
 
-func processBatchTabs(pages []*rod.Page, config *Config) error {
+// closeExistingTab closes a tab in an attached browser. Close failures are
+// warnings: content was already fetched. Chrome exits if this was the last tab.
+func closeExistingTab(page *browser.Page) {
+	if page == nil {
+		return
+	}
+
+	browserMutex.Lock()
+	bm := browserManager
+	browserMutex.Unlock()
+	if bm != nil {
+		tabs, err := bm.ListTabs()
+		if err == nil && len(tabs) == 1 {
+			logger.Info("Closing last tab, browser will close")
+		}
+	}
+
+	if err := page.Close(); err != nil {
+		logger.Verbose("Failed to close tab: %v", err)
+	}
+}
+
+func processBatchTabs(pages []*browser.Page, config *Config) error {
 	timestamp := time.Now()
 
 	successCount := 0
@@ -511,7 +525,7 @@ func processBatchTabs(pages []*rod.Page, config *Config) error {
 		current := i + 1
 		total := len(pages)
 
-		info, err := page.Info()
+		info, err := page.Meta()
 		if err != nil {
 			logger.Error("[%d/%d] Failed to get tab info: %v", current, total, err)
 			failureCount++
@@ -521,7 +535,7 @@ func processBatchTabs(pages []*rod.Page, config *Config) error {
 		logger.Info("[%d/%d] Processing: %s", current, total, info.URL)
 
 		if config.WaitFor != "" {
-			err := waitForSelector(page, config.WaitFor, time.Duration(config.Timeout)*time.Second)
+			err := fetch.WaitForSelector(page, config.WaitFor, time.Duration(config.Timeout)*time.Second)
 			if err != nil {
 				logger.Error("[%d/%d] Wait failed: %v", current, total, err)
 				failureCount++
@@ -539,13 +553,20 @@ func processBatchTabs(pages []*rod.Page, config *Config) error {
 			continue
 		}
 
-		if err := processPageContent(page, config.Format, outputPath); err != nil {
+		if err := format.ProcessContent(page, config.Format, outputPath); err != nil {
 			logger.Error("[%d/%d] Failed to process content: %v", current, total, err)
 			failureCount++
+			if config.CloseTab {
+				closeExistingTab(page)
+			}
 			continue
 		}
 
 		successCount++
+
+		if config.CloseTab {
+			closeExistingTab(page)
+		}
 	}
 
 	logger.Success("Batch complete: %d succeeded, %d failed", successCount, failureCount)
@@ -557,23 +578,23 @@ func processBatchTabs(pages []*rod.Page, config *Config) error {
 	return nil
 }
 
-func handleTabRange(cmd *cobra.Command, bm *BrowserManager, start, end int) error {
-	outputFormat := normalizeFormat(format)
-	validatedWaitFor := validateWaitFor(waitFor, cmd.Flags().Changed("wait-for"))
+func handleTabRange(cmd *cobra.Command, bm *browser.BrowserManager, start, end int) error {
+	outputFormat := validate.NormalizeFormat(flagFormat)
+	validatedWaitFor := validate.WaitFor(waitFor, cmd.Flags().Changed("wait-for"))
 	outDir := strings.TrimSpace(outputDir)
 	if outDir == "" {
 		outDir = "."
 	}
 
-	if err := validateFormat(outputFormat); err != nil {
+	if err := validate.Format(outputFormat); err != nil {
 		return err
 	}
 
-	if err := validateTimeout(timeout); err != nil {
+	if err := validate.Timeout(timeout); err != nil {
 		return err
 	}
 
-	if err := validateDirectory(outDir); err != nil {
+	if err := validate.Directory(outDir); err != nil {
 		return err
 	}
 
@@ -591,28 +612,29 @@ func handleTabRange(cmd *cobra.Command, bm *BrowserManager, start, end int) erro
 		WaitFor:   validatedWaitFor,
 		Timeout:   timeout,
 		OutputDir: outDir,
+		CloseTab:  closeTab,
 	}
 
 	return processBatchTabs(pages, config)
 }
 
-func handleTabPatternBatch(cmd *cobra.Command, pages []*rod.Page, pattern string) error {
-	outputFormat := normalizeFormat(format)
-	validatedWaitFor := validateWaitFor(waitFor, cmd.Flags().Changed("wait-for"))
+func handleTabPatternBatch(cmd *cobra.Command, pages []*browser.Page, pattern string) error {
+	outputFormat := validate.NormalizeFormat(flagFormat)
+	validatedWaitFor := validate.WaitFor(waitFor, cmd.Flags().Changed("wait-for"))
 	outDir := strings.TrimSpace(outputDir)
 	if outDir == "" {
 		outDir = "."
 	}
 
-	if err := validateFormat(outputFormat); err != nil {
+	if err := validate.Format(outputFormat); err != nil {
 		return err
 	}
 
-	if err := validateTimeout(timeout); err != nil {
+	if err := validate.Timeout(timeout); err != nil {
 		return err
 	}
 
-	if err := validateDirectory(outDir); err != nil {
+	if err := validate.Directory(outDir); err != nil {
 		return err
 	}
 
@@ -623,6 +645,7 @@ func handleTabPatternBatch(cmd *cobra.Command, pages []*rod.Page, pattern string
 		WaitFor:   validatedWaitFor,
 		Timeout:   timeout,
 		OutputDir: outDir,
+		CloseTab:  closeTab,
 	}
 
 	return processBatchTabs(pages, config)
@@ -652,7 +675,7 @@ func handleOpenURLsInBrowser(cmd *cobra.Command, urls []string) error {
 	// Validate all URLs before expensive browser connection
 	var validatedURLs []string
 	for _, urlStr := range urls {
-		validatedURL, err := validateURL(urlStr)
+		validatedURL, err := validate.URL(urlStr)
 		if err != nil {
 			logger.Warning("Skipping invalid URL '%s': %v", urlStr, err)
 			continue
@@ -667,24 +690,12 @@ func handleOpenURLsInBrowser(cmd *cobra.Command, urls []string) error {
 
 	logger.Info("Opening %d valid URL%s in browser...", len(validatedURLs), plural(len(validatedURLs)))
 
-	validatedUserDataDir := ""
-	if cmd.Flags().Changed("user-data-dir") {
-		validatedDir, err := validateUserDataDir(userDataDir)
-		if err != nil {
-			return err
-		}
-		validatedUserDataDir = validatedDir
+	opts, err := browserOptionsFromFlags(cmd, true, false)
+	if err != nil {
+		return err
 	}
 
-	validatedUserAgent := validateUserAgent(userAgent, cmd.Flags().Changed("user-agent"))
-
-	bm := NewBrowserManager(BrowserOptions{
-		Port:          port,
-		OpenBrowser:   true,
-		ForceHeadless: false,
-		UserAgent:     validatedUserAgent,
-		UserDataDir:   validatedUserDataDir,
-	})
+	bm := browser.NewBrowserManager(opts)
 
 	browserMutex.Lock()
 	browserManager = bm
@@ -695,7 +706,7 @@ func handleOpenURLsInBrowser(cmd *cobra.Command, urls []string) error {
 		browserMutex.Unlock()
 	}()
 
-	_, err := bm.Connect()
+	err = bm.Connect()
 	if err != nil {
 		return err
 	}
@@ -710,7 +721,7 @@ func handleOpenURLsInBrowser(cmd *cobra.Command, urls []string) error {
 			continue
 		}
 
-		err = page.Timeout(time.Duration(timeout) * time.Second).Navigate(validatedURL)
+		err = page.NavigateTimeout(validatedURL, time.Duration(timeout)*time.Second)
 		if err != nil {
 			logger.Error("[%d/%d] Failed to navigate: %v", current, len(validatedURLs), err)
 			continue
@@ -726,24 +737,24 @@ func handleOpenURLsInBrowser(cmd *cobra.Command, urls []string) error {
 }
 
 func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
-	outputFile := strings.TrimSpace(output)
+	outputFile := strings.TrimSpace(flagOutput)
 	outDir := strings.TrimSpace(outputDir)
 
-	outputFormat := normalizeFormat(format)
-	if err := validateFormat(outputFormat); err != nil {
+	outputFormat := validate.NormalizeFormat(flagFormat)
+	if err := validate.Format(outputFormat); err != nil {
 		return err
 	}
 
-	if err := validateTimeout(timeout); err != nil {
+	if err := validate.Timeout(timeout); err != nil {
 		return err
 	}
 
-	if err := validatePort(port); err != nil {
+	if err := validate.Port(port); err != nil {
 		return err
 	}
 
 	if outputFile != "" {
-		if err := validateOutputPath(outputFile); err != nil {
+		if err := validate.OutputPath(outputFile); err != nil {
 			return err
 		}
 	}
@@ -753,23 +764,19 @@ func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
 	}
 
 	if outDir != "" {
-		if err := validateDirectory(outDir); err != nil {
+		if err := validate.Directory(outDir); err != nil {
 			return err
 		}
 	}
 
-	validatedUserDataDir := ""
-	if cmd.Flags().Changed("user-data-dir") {
-		validatedDir, err := validateUserDataDir(userDataDir)
-		if err != nil {
-			return err
-		}
-		validatedUserDataDir = validatedDir
+	opts, err := browserOptionsFromFlags(cmd, false, forceHead)
+	if err != nil {
+		return err
 	}
 
 	var validatedURLs []string
 	for _, urlStr := range urls {
-		validatedURL, err := validateURL(urlStr)
+		validatedURL, err := validate.URL(urlStr)
 		if err != nil {
 			logger.Warning("Skipping invalid URL '%s': %v", urlStr, err)
 			continue
@@ -779,16 +786,12 @@ func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
 
 	if len(validatedURLs) == 0 {
 		logger.Error("No valid URLs to process")
-		return ErrNoValidURLs
+		return validate.ErrNoValidURLs
 	}
 
 	logger.Info("Processing %d URL%s...", len(validatedURLs), plural(len(validatedURLs)))
 
-	bm := NewBrowserManager(BrowserOptions{
-		Port:          port,
-		ForceHeadless: forceHead,
-		UserDataDir:   validatedUserDataDir,
-	})
+	bm := browser.NewBrowserManager(opts)
 	browserMutex.Lock()
 	browserManager = bm
 	browserMutex.Unlock()
@@ -799,7 +802,7 @@ func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
 		browserMutex.Unlock()
 	}()
 
-	_, err := bm.Connect()
+	err = bm.Connect()
 	if err != nil {
 		return err
 	}
@@ -808,7 +811,7 @@ func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
 		logger.Warning("--close-tab is ignored in headless mode (tabs close automatically)")
 	}
 
-	validatedWaitFor := validateWaitFor(waitFor, cmd.Flags().Changed("wait-for"))
+	validatedWaitFor := validate.WaitFor(waitFor, cmd.Flags().Changed("wait-for"))
 
 	timestamp := time.Now()
 
@@ -828,8 +831,8 @@ func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
 			continue
 		}
 
-		fetcher := NewPageFetcher(page, timeout)
-		_, err = fetcher.Fetch(FetchOptions{
+		fetcher := fetch.NewPageFetcher(page, timeout)
+		_, err = fetcher.Fetch(fetch.FetchOptions{
 			URL:     validatedURL,
 			Timeout: timeout,
 			WaitFor: validatedWaitFor,
@@ -841,7 +844,7 @@ func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
 			continue
 		}
 
-		info, err := page.Info()
+		info, err := page.Meta()
 		if err != nil {
 			logger.Error("[%d/%d] Failed to get page info: %v", current, total, err)
 			bm.ClosePage(page)
@@ -860,14 +863,14 @@ func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
 			continue
 		}
 
-		if err := processPageContent(page, outputFormat, outputPath); err != nil {
+		if err := format.ProcessContent(page, outputFormat, outputPath); err != nil {
 			logger.Error("[%d/%d] Failed to save content: %v", current, total, err)
 			bm.ClosePage(page)
 			failureCount++
 			continue
 		}
 
-		if bm.launchedHeadless || closeTab {
+		if bm.LaunchedHeadless() || closeTab {
 			bm.ClosePage(page)
 		}
 
@@ -925,7 +928,7 @@ func loadURLsFromReader(reader io.Reader, source string) ([]string, error) {
 			line = "https://" + line
 		}
 
-		if _, err := validateURL(line); err != nil {
+		if _, err := validate.URL(line); err != nil {
 			logger.Warning("Line %d: Invalid URL - skipping: %s", lineNum, scanner.Text())
 			continue
 		}
@@ -938,7 +941,7 @@ func loadURLsFromReader(reader io.Reader, source string) ([]string, error) {
 	}
 
 	if len(urls) == 0 {
-		return nil, ErrNoValidURLs
+		return nil, validate.ErrNoValidURLs
 	}
 
 	logger.Verbose("Loaded %d URLs from %s", len(urls), source)
@@ -963,7 +966,7 @@ func loadURLsFromFile(filename string) ([]string, error) {
 func handleKillBrowser(cmd *cobra.Command) error {
 	portChanged := cmd.Flags().Changed("port")
 
-	bm := NewBrowserManager(BrowserOptions{
+	bm := browser.NewBrowserManager(browser.BrowserOptions{
 		Port: port,
 	})
 
@@ -979,7 +982,7 @@ func handleKillBrowser(cmd *cobra.Command) error {
 }
 
 func handleDoctor(cmd *cobra.Command) error {
-	report, err := CollectDoctorInfo(port)
+	report, err := doctor.CollectDoctorInfo(Version, port)
 	if err != nil {
 		logger.Verbose("Warning: Some diagnostic information could not be collected: %v", err)
 	}

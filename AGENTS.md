@@ -36,8 +36,11 @@ cd snag
 # Install dependencies
 go mod download
 
+# Install
+go install github.com/p3bot/snag/cmd/snag@latest
+
 # Build binary
-go build -o snag
+go build -o snag ./cmd/snag
 
 # Run snag
 ./snag --version
@@ -48,19 +51,19 @@ go build -o snag
 
 ```bash
 # Build for current platform
-go build -o snag
+go build -o snag ./cmd/snag
 
 # Build with version info
-go build -ldflags "-X main.version=1.0.0" -o snag
+go build -ldflags "-X github.com/p3bot/snag/internal/cli.Version=1.0.0" -o snag ./cmd/snag
 
 # Run all tests (integration tests with real browser)
-go test -v
+go test -v ./...
 
 # Run specific test
-go test -v -run TestFetchPage
+go test -v ./... -run TestFetchPage
 
 # Run with coverage
-go test -v -cover
+go test -v -cover ./...
 
 # Test basic content fetching
 snag https://example.com                # Fetch page as Markdown
@@ -96,10 +99,10 @@ snag -t "github" -o repo.md             # Fetch tab matching "github", save to f
 snag -t 1 --wait-for ".content"         # Wait for selector in existing tab
 
 # Cross-platform builds
-GOOS=darwin GOARCH=arm64 go build -o snag-darwin-arm64
-GOOS=darwin GOARCH=amd64 go build -o snag-darwin-amd64
-GOOS=linux GOARCH=amd64 go build -o snag-linux-amd64
-GOOS=linux GOARCH=arm64 go build -o snag-linux-arm64
+GOOS=darwin GOARCH=arm64 go build -o snag-darwin-arm64 ./cmd/snag
+GOOS=darwin GOARCH=amd64 go build -o snag-darwin-amd64 ./cmd/snag
+GOOS=linux GOARCH=amd64 go build -o snag-linux-amd64 ./cmd/snag
+GOOS=linux GOARCH=arm64 go build -o snag-linux-arm64 ./cmd/snag
 
 # Code quality checks
 go vet ./...
@@ -120,9 +123,9 @@ rm -f snag snag-*
 
 **Project-Specific Patterns:**
 
-- Flat project structure at root (main.go, browser.go, fetch.go, formats.go, handlers.go, output.go, logger.go, errors.go, validate.go)
-- Custom logger for CLI output (logger.go)
-- Sentinel errors for internal logic (errors.go)
+- Layout: `cmd/snag/main.go` entry point, Cobra in `internal/cli`, domain work in sibling `internal/` packages
+- Custom logger for CLI output (`internal/logger`)
+- Sentinel errors live in the package that owns the failure
 - Exit codes: 0 (success), 1 (any error), 130 (SIGINT), 143 (SIGTERM)
 - Output routing (critical for piping):
   - stdout: Content only (HTML/Markdown/Text or binary formats)
@@ -130,13 +133,13 @@ rm -f snag snag-*
 
 **Naming Conventions:**
 
-- Exported constants use PascalCase: `FormatMarkdown`, `FormatHTML`
-- Sentinel errors: `ErrBrowserNotFound`, `ErrPageLoadTimeout`, etc.
-- Functions: Use descriptive verbs - `validateURL()`, `fetchPage()`, `convertToMarkdown()`
+- Exported constants use PascalCase: `format.Markdown`, `format.HTML`
+- Sentinel errors: `browser.ErrBrowserNotFound`, `fetch.ErrPageLoadTimeout`, etc.
+- Functions: Use descriptive verbs - `validate.URL()`, `fetchPage()`, `convertToMarkdown()`
 
 **Error Handling:**
 
-- Use sentinel errors defined in errors.go
+- Use sentinel errors defined in the owning package
 - Wrap errors with context: `fmt.Errorf("failed to navigate to %s: %w", url, err)`
 - Clear, actionable error messages via logger
 - Never panic for expected errors
@@ -164,7 +167,7 @@ rm -f snag snag-*
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package <name>
 ```
 
 ## Development Workflow
@@ -206,19 +209,18 @@ Types: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`
 
 **Test Suite:**
 
-- **124 total tests** across 6 test files
-- **22 pure unit tests** (no interfaces or mocking required)
-- **62 integration tests** (browser-dependent)
-- **40 unit test cases** (all pure functions)
+- **170 test functions** across 10 test files
+- Unit tests live beside each `internal/` package
+- Integration tests (browser-dependent) live in `internal/cli/cli_test.go`
 
 **Running Tests:**
 
 ```bash
-go test -v                           # All tests
-go test -v -run TestValidate         # Unit tests only (validation)
-go test -v -run TestDetectBrowser    # Unit tests only (browser detection)
-go test -v -run TestBrowser          # Integration tests (requires browser)
-go test -v -cover                    # With coverage
+go test -v ./...                     # All tests
+go test -v ./internal/validate       # Unit tests only (validation)
+go test -v ./internal/browser -run TestDetectBrowser    # Unit tests only (browser detection)
+go test -v ./internal/cli -run TestBrowser              # Integration tests (requires browser)
+go test -v -cover ./...              # With coverage
 ```
 
 **Requirements:**
@@ -230,15 +232,15 @@ go test -v -cover                    # With coverage
 
 **Browser Security:**
 
-- browser.go contains security comments about browser handling
+- `internal/browser` contains security comments about browser handling
 - Never bypass certificate validation in production
 - User agent customization available via `--user-agent` flag to bypass headless detection
 - Close tabs in headless mode by default (configurable with `--close-tab`)
 
 **Input Validation:**
 
-- URL validation via validate.go module
-- Format validation (markdown/html only)
+- URL validation via `internal/validate`
+- Format validation (md, html, text, pdf, png)
 - Timeout bounds checking (positive integers)
 - Port validation (1-65535 range)
 
@@ -258,24 +260,22 @@ go test -v -cover                    # With coverage
 
 **File Structure:**
 
-- `main.go` - CLI (Cobra), flags, handlers
-- `browser.go` - Browser/tab management (rod)
-- `fetch.go` - Page fetching, CDP operations
-- `formats.go` - Content conversion (HTML to Markdown/Text, PDF, PNG)
-- `logger.go` - Custom logger (4 levels, stderr only)
-- `errors.go` - Sentinel errors
-- `validate.go` - Input validation
-- `output.go` - Filename generation and conflict resolution
-- `handlers.go` - CLI command handlers
+- `cmd/snag/main.go` - Thin entry point (`cli.Execute`, exit codes)
+- `internal/cli` - Cobra command, flags, handlers, signals
+- `internal/browser` - Rod launch, connect, tab list/select
+- `internal/fetch` - Page navigation and content extraction
+- `internal/format` - HTML to md/html/text/pdf/png
+- `internal/output` - Filename generation and conflict resolution
+- `internal/validate` - URL and input validation
+- `internal/logger` - Four-level stderr logger
+- `internal/doctor` - `--doctor` diagnostics
+- `testdata/` - Shared HTML and URL fixtures at the module root
 
 **Key Tab Code Locations:**
 
 ```
-browser.go:404-434    # ListTabs()
-browser.go:434-463    # GetTabByIndex()
-browser.go:473-544    # GetTabByPattern() with page.Info() caching
-main.go:345-383       # handleListTabs()
-main.go:412-534       # handleTabFetch()
+internal/browser/browser.go    # ListTabs, GetTabByIndex, GetTabsByPattern
+internal/cli/handlers.go       # handleListTabs, handleTabFetch
 ```
 
 **Browser Modes:**
@@ -350,7 +350,7 @@ snag -t 2 --wait-for ".loaded"         # Wait for selector
 - `--tab` and `<url>` argument are mutually exclusive
 - Tab indexes are 1-based for user display (converted internally to 0-based)
 - All pattern matching is case-insensitive
-- Performance optimized: Single-pass page.Info() caching (browser.go:487-507)
+- Performance optimized: Single-pass page.Info() caching in GetTabsByPattern
 - Tab listing output goes to stdout (enables piping)
 
 **Tab Ordering:**
@@ -429,7 +429,7 @@ Include this output when reporting issues.
 
 **Critical Bug Fix - Remote Debugging Port:**
 
-- ALWAYS explicitly set `--remote-debugging-port` flag (browser.go:259-260)
+- ALWAYS explicitly set `--remote-debugging-port` flag (`internal/browser`)
 - Rod's launcher won't set it for default port 9222, causing random port selection
 - Test with both default and custom ports
 
@@ -438,22 +438,22 @@ Include this output when reporting issues.
 - User-facing: 1-based (tabs [1], [2], [3]...)
 - Internal: 0-based (converted in TabInfo struct and GetTabByIndex)
 
-**Performance - GetTabByPattern():**
+**Performance - GetTabsByPattern():**
 
-- Caches `page.Info()` results in single pass (browser.go:487-507)
+- Caches `page.Info()` results in a single pass (`internal/browser/browser.go`)
 - Reduces network calls from 3N to N (3x improvement for 10 tabs)
 - Do not modify pattern matching without preserving this optimization
 
 ## Release Process
 
-Follow the comprehensive guide in `docs/release-process.md`.
+Follow the comprehensive guide in `.ai/tasks/release-process.md`.
 
 **Quick reference**:
 
 ```bash
 export VERSION="0.0.4"
 go test -v ./...                    # Run tests first
-# Then follow docs/release-process.md for full steps
+# Then follow .ai/tasks/release-process.md for full steps
 ```
 
 ## License

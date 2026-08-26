@@ -129,8 +129,8 @@ snag --force-headless --force-headless https://example.com
 
 **Location:**
 
-- Flag definition: `main.go` (in CLI flag definitions)
-- Browser launch logic: `browser.go` (browser mode detection and launch)
+- Flag definition: `internal/cli/root.go` (`init`)
+- Browser launch logic: `internal/browser` (mode detection and launch)
 
 **How it works:**
 

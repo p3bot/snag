@@ -4,22 +4,20 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package format
 
 import (
-	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/p3bot/snag/internal/logger"
+	"github.com/p3bot/snag/internal/testutil"
 )
 
 func init() {
-	// Initialize global logger for tests (discard output)
-	logger = &Logger{
-		level:  LevelQuiet,
-		color:  false,
-		writer: io.Discard,
-	}
+	logger.SetDefault(logger.Discard())
 }
 
 func TestConvertToMarkdown_Headings(t *testing.T) {
@@ -29,7 +27,7 @@ func TestConvertToMarkdown_Headings(t *testing.T) {
 		<h3>Heading 3</h3>
 	</body></html>`
 
-	converter := NewContentConverter(FormatMarkdown)
+	converter := NewContentConverter(Markdown)
 	md, err := converter.convertToMarkdown(html)
 	if err != nil {
 		t.Fatalf("convertToMarkdown failed: %v", err)
@@ -52,7 +50,7 @@ func TestConvertToMarkdown_Links(t *testing.T) {
 		<a href="https://example.com">Example Link</a>
 	</body></html>`
 
-	converter := NewContentConverter(FormatMarkdown)
+	converter := NewContentConverter(Markdown)
 	md, err := converter.convertToMarkdown(html)
 	if err != nil {
 		t.Fatalf("convertToMarkdown failed: %v", err)
@@ -76,7 +74,7 @@ func TestConvertToMarkdown_Tables(t *testing.T) {
 		</table>
 	</body></html>`
 
-	converter := NewContentConverter(FormatMarkdown)
+	converter := NewContentConverter(Markdown)
 	md, err := converter.convertToMarkdown(html)
 	if err != nil {
 		t.Fatalf("convertToMarkdown failed: %v", err)
@@ -110,7 +108,7 @@ func TestConvertToMarkdown_Strikethrough(t *testing.T) {
 		<p>This is <strike>old strikethrough</strike> text.</p>
 	</body></html>`
 
-	converter := NewContentConverter(FormatMarkdown)
+	converter := NewContentConverter(Markdown)
 	md, err := converter.convertToMarkdown(html)
 	if err != nil {
 		t.Fatalf("convertToMarkdown failed: %v", err)
@@ -145,7 +143,7 @@ func TestConvertToMarkdown_Lists(t *testing.T) {
 		</ol>
 	</body></html>`
 
-	converter := NewContentConverter(FormatMarkdown)
+	converter := NewContentConverter(Markdown)
 	md, err := converter.convertToMarkdown(html)
 	if err != nil {
 		t.Fatalf("convertToMarkdown failed: %v", err)
@@ -177,7 +175,7 @@ func TestConvertToMarkdown_CodeBlocks(t *testing.T) {
 }</code></pre>
 	</body></html>`
 
-	converter := NewContentConverter(FormatMarkdown)
+	converter := NewContentConverter(Markdown)
 	md, err := converter.convertToMarkdown(html)
 	if err != nil {
 		t.Fatalf("convertToMarkdown failed: %v", err)
@@ -197,7 +195,7 @@ func TestConvertToMarkdown_CodeBlocks(t *testing.T) {
 func TestConvertToMarkdown_Minimal(t *testing.T) {
 	html := `<html><body>Hello</body></html>`
 
-	converter := NewContentConverter(FormatMarkdown)
+	converter := NewContentConverter(Markdown)
 	md, err := converter.convertToMarkdown(html)
 	if err != nil {
 		t.Fatalf("convertToMarkdown failed: %v", err)
@@ -216,11 +214,11 @@ func TestConvertToMarkdown_NestedLists(t *testing.T) {
 	}{
 		{
 			name:     "nested unordered lists",
-			filename: "testdata/nested-lists-ul.html",
+			filename: testutil.Testdata("nested-lists-ul.html"),
 		},
 		{
 			name:     "nested ordered lists",
-			filename: "testdata/nested-lists-ol.html",
+			filename: testutil.Testdata("nested-lists-ol.html"),
 		},
 	}
 
@@ -231,7 +229,7 @@ func TestConvertToMarkdown_NestedLists(t *testing.T) {
 				t.Fatalf("failed to read test file: %v", err)
 			}
 
-			converter := NewContentConverter(FormatMarkdown)
+			converter := NewContentConverter(Markdown)
 			md, err := converter.convertToMarkdown(string(htmlBytes))
 			if err != nil {
 				t.Fatalf("convertToMarkdown failed: %v", err)
@@ -258,7 +256,7 @@ func TestConvertToMarkdown_ComplexTables(t *testing.T) {
 	}{
 		{
 			name:     "table with colspan and footer",
-			filename: "testdata/table-complex.html",
+			filename: testutil.Testdata("table-complex.html"),
 		},
 	}
 
@@ -269,7 +267,7 @@ func TestConvertToMarkdown_ComplexTables(t *testing.T) {
 				t.Fatalf("failed to read test file: %v", err)
 			}
 
-			converter := NewContentConverter(FormatMarkdown)
+			converter := NewContentConverter(Markdown)
 			md, err := converter.convertToMarkdown(string(htmlBytes))
 			if err != nil {
 				t.Fatalf("convertToMarkdown failed: %v", err)
@@ -287,12 +285,12 @@ func TestConvertToMarkdown_ComplexTables(t *testing.T) {
 }
 
 func TestConvertToMarkdown_Images(t *testing.T) {
-	htmlBytes, err := os.ReadFile("testdata/images.html")
+	htmlBytes, err := os.ReadFile(testutil.Testdata("images.html"))
 	if err != nil {
 		t.Fatalf("failed to read test file: %v", err)
 	}
 
-	converter := NewContentConverter(FormatMarkdown)
+	converter := NewContentConverter(Markdown)
 	md, err := converter.convertToMarkdown(string(htmlBytes))
 	if err != nil {
 		t.Fatalf("convertToMarkdown failed: %v", err)
@@ -314,11 +312,11 @@ func TestConvertToMarkdown_Blockquotes(t *testing.T) {
 	}{
 		{
 			name:     "simple blockquote",
-			filename: "testdata/blockquotes.html",
+			filename: testutil.Testdata("blockquotes.html"),
 		},
 		{
 			name:     "nested blockquotes",
-			filename: "testdata/blockquotes-nested.html",
+			filename: testutil.Testdata("blockquotes-nested.html"),
 		},
 	}
 
@@ -329,7 +327,7 @@ func TestConvertToMarkdown_Blockquotes(t *testing.T) {
 				t.Fatalf("failed to read test file: %v", err)
 			}
 
-			converter := NewContentConverter(FormatMarkdown)
+			converter := NewContentConverter(Markdown)
 			md, err := converter.convertToMarkdown(string(htmlBytes))
 			if err != nil {
 				t.Fatalf("convertToMarkdown failed: %v", err)
@@ -347,12 +345,12 @@ func TestConvertToMarkdown_Blockquotes(t *testing.T) {
 }
 
 func TestConvertToMarkdown_DefinitionLists(t *testing.T) {
-	htmlBytes, err := os.ReadFile("testdata/definition-lists.html")
+	htmlBytes, err := os.ReadFile(testutil.Testdata("definition-lists.html"))
 	if err != nil {
 		t.Fatalf("failed to read test file: %v", err)
 	}
 
-	converter := NewContentConverter(FormatMarkdown)
+	converter := NewContentConverter(Markdown)
 	md, err := converter.convertToMarkdown(string(htmlBytes))
 	if err != nil {
 		t.Fatalf("convertToMarkdown failed: %v", err)
@@ -374,15 +372,15 @@ func TestConvertToMarkdown_MalformedHTML(t *testing.T) {
 	}{
 		{
 			name:     "unclosed tags",
-			filename: "testdata/malformed-unclosed.html",
+			filename: testutil.Testdata("malformed-unclosed.html"),
 		},
 		{
 			name:     "mismatched tags",
-			filename: "testdata/malformed-mismatched.html",
+			filename: testutil.Testdata("malformed-mismatched.html"),
 		},
 		{
 			name:     "wrong order",
-			filename: "testdata/malformed-wrong-order.html",
+			filename: testutil.Testdata("malformed-wrong-order.html"),
 		},
 	}
 
@@ -393,7 +391,7 @@ func TestConvertToMarkdown_MalformedHTML(t *testing.T) {
 				t.Fatalf("failed to read test file: %v", err)
 			}
 
-			converter := NewContentConverter(FormatMarkdown)
+			converter := NewContentConverter(Markdown)
 			md, err := converter.convertToMarkdown(string(htmlBytes))
 
 			// Should not panic or error, just handle gracefully
@@ -410,12 +408,12 @@ func TestConvertToMarkdown_MalformedHTML(t *testing.T) {
 }
 
 func TestConvertToMarkdown_SpecialCharacters(t *testing.T) {
-	htmlBytes, err := os.ReadFile("testdata/special-characters.html")
+	htmlBytes, err := os.ReadFile(testutil.Testdata("special-characters.html"))
 	if err != nil {
 		t.Fatalf("failed to read test file: %v", err)
 	}
 
-	converter := NewContentConverter(FormatMarkdown)
+	converter := NewContentConverter(Markdown)
 	md, err := converter.convertToMarkdown(string(htmlBytes))
 	if err != nil {
 		t.Fatalf("convertToMarkdown failed: %v", err)
@@ -438,7 +436,7 @@ func TestExtractPlainText_Headings(t *testing.T) {
 		<p>Paragraph text</p>
 	</body></html>`
 
-	converter := NewContentConverter(FormatText)
+	converter := NewContentConverter(Text)
 	text := converter.extractPlainText(html)
 
 	// Check for text content (no HTML tags, no markdown syntax)
@@ -468,7 +466,7 @@ func TestExtractPlainText_Links(t *testing.T) {
 		<p>Visit <a href="https://example.com">our website</a> for more info.</p>
 	</body></html>`
 
-	converter := NewContentConverter(FormatText)
+	converter := NewContentConverter(Text)
 	text := converter.extractPlainText(html)
 
 	// Should contain the URL (plain text extraction shows URLs)
@@ -498,7 +496,7 @@ func TestExtractPlainText_Formatting(t *testing.T) {
 		<p>This has <del>strikethrough</del> text.</p>
 	</body></html>`
 
-	converter := NewContentConverter(FormatText)
+	converter := NewContentConverter(Text)
 	text := converter.extractPlainText(html)
 
 	// Should contain the text content
@@ -531,7 +529,7 @@ func TestExtractPlainText_Scripts(t *testing.T) {
 		<script>alert("popup");</script>
 	</body></html>`
 
-	converter := NewContentConverter(FormatText)
+	converter := NewContentConverter(Text)
 	text := converter.extractPlainText(html)
 
 	// Should contain visible content
@@ -557,7 +555,7 @@ func TestExtractPlainText_Lists(t *testing.T) {
 		</ol>
 	</body></html>`
 
-	converter := NewContentConverter(FormatText)
+	converter := NewContentConverter(Text)
 	text := converter.extractPlainText(html)
 
 	// Should contain list items
@@ -583,7 +581,7 @@ func TestExtractPlainText_Lists(t *testing.T) {
 func TestExtractPlainText_Minimal(t *testing.T) {
 	html := `<html><body>Hello World</body></html>`
 
-	converter := NewContentConverter(FormatText)
+	converter := NewContentConverter(Text)
 	text := converter.extractPlainText(html)
 
 	// Should contain the text
@@ -600,7 +598,7 @@ func TestExtractPlainText_Minimal(t *testing.T) {
 func TestExtractPlainText_Empty(t *testing.T) {
 	html := `<html><body></body></html>`
 
-	converter := NewContentConverter(FormatText)
+	converter := NewContentConverter(Text)
 	text := converter.extractPlainText(html)
 
 	// Should be empty or whitespace only
@@ -611,12 +609,12 @@ func TestExtractPlainText_Empty(t *testing.T) {
 }
 
 func TestExtractPlainText_HiddenElements(t *testing.T) {
-	htmlBytes, err := os.ReadFile("testdata/hidden-elements.html")
+	htmlBytes, err := os.ReadFile(testutil.Testdata("hidden-elements.html"))
 	if err != nil {
 		t.Fatalf("failed to read test file: %v", err)
 	}
 
-	converter := NewContentConverter(FormatText)
+	converter := NewContentConverter(Text)
 	text := converter.extractPlainText(string(htmlBytes))
 
 	// Should contain visible content
@@ -630,5 +628,49 @@ func TestExtractPlainText_HiddenElements(t *testing.T) {
 	}
 	if strings.Contains(text, "console.log") {
 		t.Error("should not contain JavaScript")
+	}
+}
+
+type fakePage struct {
+	html    string
+	htmlErr error
+	pdf     []byte
+	pdfErr  error
+	png     []byte
+	pngErr  error
+}
+
+func (f fakePage) HTML() (string, error)          { return f.html, f.htmlErr }
+func (f fakePage) PDF() ([]byte, error)           { return f.pdf, f.pdfErr }
+func (f fakePage) ScreenshotPNG() ([]byte, error) { return f.png, f.pngErr }
+
+func TestProcessContent_MarkdownToFile(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out.md")
+	err := ProcessContent(fakePage{html: "<h1>Hello</h1>"}, Markdown, out)
+	if err != nil {
+		t.Fatalf("ProcessContent: %v", err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if !strings.Contains(string(got), "Hello") {
+		t.Errorf("expected heading text in markdown, got: %s", got)
+	}
+}
+
+func TestProcessContent_PDFUsesPagePDF(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out.pdf")
+	payload := []byte("%PDF-fake")
+	err := ProcessContent(fakePage{html: "<h1>ignored</h1>", pdf: payload}, PDF, out)
+	if err != nil {
+		t.Fatalf("ProcessContent: %v", err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if string(got) != string(payload) {
+		t.Errorf("PDF output = %q, want %q", got, payload)
 	}
 }

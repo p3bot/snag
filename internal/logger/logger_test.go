@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package logger
 
 import (
 	"bytes"
@@ -16,11 +16,7 @@ import (
 
 // newTestLogger creates a logger for testing that writes to a buffer
 func newTestLogger(level LogLevel, writer io.Writer) *Logger {
-	return &Logger{
-		level:  level,
-		color:  false, // Disable color for testing
-		writer: writer,
-	}
+	return NewWithWriter(level, writer, false)
 }
 
 func TestLogger_Success(t *testing.T) {
@@ -194,7 +190,7 @@ func TestNewLogger(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			logger := NewLogger(tt.level)
+			logger := New(tt.level)
 
 			if logger == nil {
 				t.Fatal("NewLogger returned nil")
@@ -218,4 +214,38 @@ func TestNewLogger(t *testing.T) {
 			_ = logger.color
 		})
 	}
+}
+
+func TestSetDefault_PackageFuncs(t *testing.T) {
+	t.Cleanup(func() { SetDefault(New(LevelNormal)) })
+
+	var buf bytes.Buffer
+	SetDefault(NewWithWriter(LevelNormal, &buf, false))
+	Info("from default")
+	if !strings.Contains(buf.String(), "from default") {
+		t.Errorf("Info after SetDefault = %q, want message", buf.String())
+	}
+
+	SetDefault(nil)
+	Error("still works")
+}
+
+func TestSetDefault_Concurrent(t *testing.T) {
+	t.Cleanup(func() { SetDefault(New(LevelNormal)) })
+
+	var buf bytes.Buffer
+	SetDefault(NewWithWriter(LevelNormal, &buf, false))
+
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 1000; i++ {
+			Info("concurrent")
+		}
+		close(done)
+	}()
+	for i := 0; i < 1000; i++ {
+		SetDefault(NewWithWriter(LevelQuiet, io.Discard, false))
+		SetDefault(NewWithWriter(LevelNormal, &buf, false))
+	}
+	<-done
 }

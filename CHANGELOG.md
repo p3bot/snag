@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Layout is now `cmd/snag` plus `internal/` packages (no root `package main`)
+- Install with `go install github.com/p3bot/snag/cmd/snag@latest`
+- Version ldflags symbol is `github.com/p3bot/snag/internal/cli.Version`
+
+### Fixed
+
+- `--info` domain field no longer truncates IPv6 hostnames
+- Auto-generated filenames no longer mangle IPv6 hosts when falling back to a URL slug
+- `--doctor` counts tabs via Chrome's HTTP `/json/list` instead of attaching a DevTools session
+
 ## [1.1.0] - 2026-02-04
 
 ### Added

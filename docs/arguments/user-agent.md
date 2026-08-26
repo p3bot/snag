@@ -83,15 +83,13 @@ Set a custom user agent string for browser requests. This flag allows you to cus
 
 | Combination                                | Behavior              | Notes                                            |
 | ------------------------------------------ | --------------------- | ------------------------------------------------ |
-| `--user-agent` + `--force-headless`        | Works normally        | UA applied in headless mode                      |
-| `--user-agent` + `--open-browser` (no URL) | **Warning + Ignored** | No navigation happening                          |
-| `--user-agent` + `--open-browser` + URL    | Works normally        | UA applied when opening URLs in tabs             |
-| `--user-agent` + `--user-data-dir`         | Works normally        | UA for this session; profile for persistent data |
-| `--user-agent` + `--kill-browser`          | **Flag ignored**      | No navigation performed                          |
+| `--user-agent` + `--force-headless`        | Works normally | UA applied in headless mode                                         |
+| `--user-agent` + `--open-browser` (no URL) | Works normally | UA set on the launched Chrome process                               |
+| `--user-agent` + `--open-browser` + URL    | Works normally | UA applied at launch and when opening URLs in tabs                  |
+| `--user-agent` + `--user-data-dir`         | Works normally | UA for this session; profile for persistent data                    |
+| `--user-agent` + `--kill-browser`          | **Flag ignored** | No navigation performed                                           |
 
-**Warning message for open-browser without URL:**
-
-- "Warning: --user-agent ignored with --open-browser (no navigation)"
+If a debug browser is already running, `--open-browser` attaches and warns that `--user-agent` is ignored (the running process already has its own user agent).
 
 ## Output Control Interactions
 
@@ -162,7 +160,8 @@ snag --user-agent "CustomBot/1.0" https://example.com --format pdf
 # With wait-for and timeout
 snag --user-agent "CustomBot/1.0" https://example.com --wait-for ".content" --timeout 60
 
-# Open browser with custom UA
+# Open browser with custom UA (with or without URLs)
+snag --user-agent "CustomBot/1.0" --open-browser
 snag --user-agent "CustomBot/1.0" --open-browser https://example.com
 
 # Special characters and Unicode (allowed)
@@ -182,9 +181,6 @@ snag --user-agent "   " https://example.com       # ⚠️  Warning: empty after
 # Existing tabs (can't change UA)
 snag --user-agent "CustomBot/1.0" --tab 1         # ⚠️  Warning: tab already has UA
 snag --user-agent "CustomBot/1.0" --all-tabs -d output  # ⚠️  Warning: tabs already have UAs
-
-# No navigation happening
-snag --user-agent "CustomBot/1.0" --open-browser  # ⚠️  Warning: no navigation
 ```
 
 **Silently ignored:**
@@ -249,12 +245,11 @@ snag --user-agent "Googlebot/2.1 (+http://www.google.com/bot.html)" https://my-s
 - Browser launch: Applied to all new pages created in that browser instance
 - Existing tabs: Cannot be applied (warn and ignore)
 
-**Location (to be implemented):**
+**Location:**
 
-- Flag definition: `main.go` (in flags section)
-- Validation/sanitization: `validate.go` or inline in main
-- Application: `browser.go` or `fetch.go` (when creating new pages)
-- Rod API: `page.SetUserAgent(ua)` before navigation
+- Flag definition: `internal/cli/root.go` (`init`)
+- Validation/sanitization: `internal/validate` (`UserAgent`)
+- Application: `internal/browser` (launcher `--user-agent` flag on launch; ignored when attaching to an existing browser)
 
 **Validation rules:**
 
@@ -269,11 +264,3 @@ snag --user-agent "Googlebot/2.1 (+http://www.google.com/bot.html)" https://my-s
 - Newline stripping prevents HTTP header injection attacks
 - No arbitrary restrictions on content (user responsibility)
 - Warnings for ignored flags prevent user confusion
-
-#### Implementation Notes
-
-**TODO items related to this flag:**
-
-- [ ] Add `strings.TrimSpace()` for all string arguments (see PROJECT.md TODO)
-- [ ] Implement newline sanitization for security
-- [ ] Add warning messages for ignored scenarios (tabs, empty, no-navigation)

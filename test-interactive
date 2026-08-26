@@ -173,7 +173,7 @@ log_title "Snag Interactive Testing Suite"
 
 # Build snag
 log_heading "Building Snag"
-if ! go build -o snag; then
+if ! go build -o snag ./cmd/snag; then
     log_failure "Failed to build snag"
     exit 1
 fi

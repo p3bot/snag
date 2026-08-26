@@ -53,7 +53,7 @@ git pull origin main
 go test -v ./...
 
 # Verify build works
-go build -o snag
+go build -o snag ./cmd/snag
 ./snag --version
 rm snag
 
@@ -224,7 +224,7 @@ echo "Tarball SHA256: $TARBALL_SHA256"
 # Edit Formula/snag.rb and update:
 # 1. url line: Update version in URL
 # 2. sha256 line: Update with TARBALL_SHA256
-# 3. ldflags: Update version in "-X main.version=X.X.X"
+# 3. ldflags: Update version in "-X github.com/p3bot/snag/internal/cli.Version=X.X.X"
 # 4. test: Update expected version in assert_match
 
 # After editing, commit and push
@@ -241,7 +241,8 @@ cd -
 ```ruby
 url "https://github.com/grantcarthew/snag/archive/refs/tags/v0.1.0.tar.gz"
 sha256 "abc123..."  # Use TARBALL_SHA256 value
-ldflags: "-X main.version=0.1.0"
+ldflags = "-X github.com/p3bot/snag/internal/cli.Version=0.1.0"
+system "go", "build", *std_go_args(ldflags:), "./cmd/snag"
 assert_match "0.1.0", shell_output("#{bin}/snag --version")
 ```
 

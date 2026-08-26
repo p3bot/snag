@@ -11,7 +11,7 @@
 reference/
 
 # Go Binary Output
-snag
+/snag
 *.exe
 *.exe~
 *.dll

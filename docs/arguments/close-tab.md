@@ -109,8 +109,8 @@ snag --all-tabs --close-tab                       # Closes all tabs → closes b
 
 **Location:**
 
-- Flag definition: `main.go` (in CLI flag definitions)
-- Close logic: `browser.go` (tab/browser management)
+- Flag definition: `internal/cli/root.go` (`init`)
+- Close logic: `internal/browser` (`ClosePage`) and `internal/cli/handlers.go`
 
 **How it works:**
 

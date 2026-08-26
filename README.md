@@ -90,7 +90,7 @@ brew install p3bot/tap/snag
 ### Go Install
 
 ```bash
-go install github.com/p3bot/snag@latest
+go install github.com/p3bot/snag/cmd/snag@latest
 ```
 
 ### Build from Source
@@ -98,7 +98,7 @@ go install github.com/p3bot/snag@latest
 ```bash
 git clone https://github.com/p3bot/snag.git
 cd snag
-go build
+go build -o snag ./cmd/snag
 ./snag --version
 ```
 

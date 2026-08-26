@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package output
 
 import (
 	"fmt"
@@ -14,12 +14,17 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/p3bot/snag/internal/format"
+	"github.com/p3bot/snag/internal/logger"
 )
 
 var (
 	slugNonAlphanumeric = regexp.MustCompile(`[^a-z0-9]+`)
 	slugMultipleHyphens = regexp.MustCompile(`-+`)
 )
+
+const MaxSlugLength = 80
 
 func SlugifyTitle(title string, maxLen int) string {
 	slug := strings.ToLower(title)
@@ -44,32 +49,41 @@ func GenerateURLSlug(urlStr string) string {
 		return "page"
 	}
 
-	hostname := parsedURL.Host
+	hostname := parsedURL.Hostname()
 	if hostname == "" {
 		return "page"
 	}
 
-	return SlugifyTitle(hostname, MaxSlugLength)
+	name := hostname
+	if port := parsedURL.Port(); port != "" {
+		name = hostname + "-" + port
+	}
+
+	slug := SlugifyTitle(name, MaxSlugLength)
+	if slug == "" {
+		return "page"
+	}
+	return slug
 }
 
-func GetFileExtension(format string) string {
-	switch format {
-	case FormatMarkdown:
+func GetFileExtension(name string) string {
+	switch name {
+	case format.Markdown:
 		return ".md"
-	case FormatHTML:
+	case format.HTML:
 		return ".html"
-	case FormatText:
+	case format.Text:
 		return ".txt"
-	case FormatPDF:
+	case format.PDF:
 		return ".pdf"
-	case FormatPNG:
+	case format.PNG:
 		return ".png"
 	default:
 		return ".md"
 	}
 }
 
-func GenerateFilename(title string, format string, timestamp time.Time, urlStr string) string {
+func GenerateFilename(title string, name string, timestamp time.Time, urlStr string) string {
 	timePrefix := timestamp.Format("2006-01-02-150405")
 
 	titleSlug := SlugifyTitle(title, MaxSlugLength)
@@ -80,7 +94,7 @@ func GenerateFilename(title string, format string, timestamp time.Time, urlStr s
 		logger.Debug("Empty title slug, using URL slug: %s", titleSlug)
 	}
 
-	ext := GetFileExtension(format)
+	ext := GetFileExtension(name)
 
 	filename := fmt.Sprintf("%s-%s%s", timePrefix, titleSlug, ext)
 	logger.Debug("Generated filename: %s", filename)

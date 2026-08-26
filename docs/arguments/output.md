@@ -195,9 +195,9 @@ snag https://example.com -o myfile                   # ⚠️ No extension
 
 **Location:**
 
-- Flag definition: `main.go:init()`
-- Handler logic: `main.go:runCobra()`
-- Path validation: `validate.go` functions
+- Flag definition: `internal/cli/root.go` (`init`)
+- Handler logic: `internal/cli/root.go` (`runCobra`)
+- Path validation: `internal/validate` (`OutputPath`)
 - File writing: Various handler functions
 
 **Processing Flow:**

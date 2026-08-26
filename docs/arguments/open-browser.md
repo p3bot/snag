@@ -98,14 +98,11 @@ All output/format flags are **warned and ignored** because `--open-browser` does
 | ------------------------------------------- | ------------------------- | -------------------------------------------------------------------------- |
 | `--open-browser` + `--port`                 | Works normally            | Launch visible browser on custom port                                      |
 | `--open-browser` + `--close-tab`            | **Warning**, flag ignored | `"Warning: --close-tab ignored with --open-browser (no content fetching)"` |
-| `--open-browser` + `--user-agent` (no URLs) | **Warning**, flag ignored | `"Warning: --user-agent ignored with --open-browser (no navigation)"`      |
-| `--open-browser` + `--user-agent` + URLs    | Works normally            | User agent applied during navigation to URLs                               |
+| `--open-browser` + `--user-agent` (no URLs) | Works normally            | UA set on the launched Chrome process                                      |
+| `--open-browser` + `--user-agent` + URLs    | Works normally            | UA applied at launch and when opening URLs in tabs                         |
 | `--open-browser` + `--user-data-dir`        | Works normally            | Launch visible browser with custom profile                                 |
 
-**User Agent Special Case:**
-
-- Without URLs: No navigation occurs, so user agent has no effect → Warn
-- With URLs: User agent is applied when navigating to URLs → Works normally
+If a debug browser is already running, `--user-agent` is ignored with a warning from the attach path (the running process already has its own user agent).
 
 **Logging Interactions:**
 
@@ -140,7 +137,8 @@ snag --open-browser --port 9223
 # Open browser with custom profile
 snag --open-browser --user-data-dir ./my-profile
 
-# Open browser with URLs and custom user agent
+# Open browser with custom user agent (with or without URLs)
+snag --open-browser --user-agent "CustomBot/1.0"
 snag --open-browser --user-agent "CustomBot/1.0" https://example.com
 
 # Open browser with verbose logging
@@ -173,9 +171,6 @@ snag --open-browser https://example.com --wait-for ".content"
 snag --open-browser --tab 1
 snag --open-browser --all-tabs
 
-# ⚠️ User agent ignored (no navigation)
-snag --open-browser --user-agent "CustomBot/1.0"
-
 # ⚠️ Close-tab ignored (no fetching)
 snag --open-browser https://example.com --close-tab
 ```
@@ -184,9 +179,9 @@ snag --open-browser https://example.com --close-tab
 
 **Location:**
 
-- Flag definition: `main.go` (in CLI flag definitions)
-- Browser launch logic: `browser.go` (browser mode detection and launch)
-- Handler: `main.go` (open-browser mode handler)
+- Flag definition: `internal/cli/root.go` (`init`)
+- Browser launch logic: `internal/browser` (`OpenBrowserOnly`, `Connect`)
+- Handler: `internal/cli/root.go` (`runCobra`) and `internal/cli/handlers.go` (`handleOpenURLsInBrowser`)
 
 **How it works:**
 
@@ -209,6 +204,5 @@ snag --open-browser https://example.com --close-tab
 - Wait-for: `"Warning: --wait-for ignored with --open-browser (no content fetching)"`
 - Tab operations: `"Warning: --tab ignored with --open-browser (no content fetching)"`
 - Close-tab: `"Warning: --close-tab ignored with --open-browser (no content fetching)"`
-- User agent (no URLs): `"Warning: --user-agent ignored with --open-browser (no navigation)"`
 
 ---

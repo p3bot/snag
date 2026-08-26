@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package validate
 
 import (
 	"fmt"
@@ -12,9 +12,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/p3bot/snag/internal/format"
+	"github.com/p3bot/snag/internal/logger"
+	"github.com/p3bot/snag/internal/output"
 )
 
-func validateURL(urlStr string) (string, error) {
+func URL(urlStr string) (string, error) {
 	if !strings.Contains(urlStr, "://") {
 		urlStr = "https://" + urlStr
 		logger.Verbose("No scheme provided, using: %s", urlStr)
@@ -59,7 +63,7 @@ func validateURL(urlStr string) (string, error) {
 	return urlStr, nil
 }
 
-func isNonFetchableURL(urlStr string) bool {
+func IsNonFetchableURL(urlStr string) bool {
 	nonFetchablePrefixes := []string{
 		"chrome://",
 		"about:",
@@ -78,7 +82,7 @@ func isNonFetchableURL(urlStr string) bool {
 	return false
 }
 
-func validateTimeout(timeout int) error {
+func Timeout(timeout int) error {
 	if timeout <= 0 {
 		logger.Error("Invalid timeout: %d", timeout)
 		logger.ErrorWithSuggestion(
@@ -90,7 +94,7 @@ func validateTimeout(timeout int) error {
 	return nil
 }
 
-func validatePort(port int) error {
+func Port(port int) error {
 	if port < 1024 || port > 65535 {
 		logger.Error("Invalid port: %d", port)
 		logger.ErrorWithSuggestion(
@@ -102,7 +106,7 @@ func validatePort(port int) error {
 	return nil
 }
 
-func validateOutputPath(path string) error {
+func OutputPath(path string) error {
 	if path == "" {
 		logger.Error("Output file path cannot be empty")
 		logger.ErrorWithSuggestion(
@@ -159,57 +163,57 @@ func validateOutputPath(path string) error {
 	return nil
 }
 
-func normalizeFormat(format string) string {
-	format = strings.TrimSpace(format)
-	format = strings.ToLower(format)
+func NormalizeFormat(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.ToLower(name)
 
-	switch format {
+	switch name {
 	case "markdown":
-		return FormatMarkdown
+		return format.Markdown
 	case "txt":
-		return FormatText
+		return format.Text
 	default:
-		return format
+		return name
 	}
 }
 
-func validateFormat(format string) error {
-	if format == "" {
+func Format(name string) error {
+	if name == "" {
 		logger.Error("Format cannot be empty")
 		logger.ErrorWithSuggestion(
 			"Format must be specified",
-			fmt.Sprintf("snag <url> --format %s", FormatMarkdown),
+			fmt.Sprintf("snag <url> --format %s", format.Markdown),
 		)
 		return fmt.Errorf("format cannot be empty")
 	}
 
 	validFormats := map[string]bool{
-		FormatMarkdown: true,
-		FormatHTML:     true,
-		FormatText:     true,
-		FormatPDF:      true,
-		FormatPNG:      true,
+		format.Markdown: true,
+		format.HTML:     true,
+		format.Text:     true,
+		format.PDF:      true,
+		format.PNG:      true,
 	}
 
-	if !validFormats[format] {
-		logger.Error("Invalid format '%s'. Supported: md, html, text, pdf, png", format)
+	if !validFormats[name] {
+		logger.Error("Invalid format '%s'. Supported: md, html, text, pdf, png", name)
 		logger.ErrorWithSuggestion(
 			"Choose a valid format",
-			fmt.Sprintf("snag <url> --format %s", FormatMarkdown),
+			fmt.Sprintf("snag <url> --format %s", format.Markdown),
 		)
-		return fmt.Errorf("invalid format: %s", format)
+		return fmt.Errorf("invalid format: %s", name)
 	}
 
 	return nil
 }
 
-func checkExtensionMismatch(outputFile string, format string) bool {
+func CheckExtensionMismatch(outputFile string, format string) bool {
 	if outputFile == "" {
 		return false
 	}
 
 	ext := strings.ToLower(filepath.Ext(outputFile))
-	expectedExt := strings.ToLower(GetFileExtension(format))
+	expectedExt := strings.ToLower(output.GetFileExtension(format))
 
 	if ext != expectedExt {
 		if ext == "" {
@@ -223,7 +227,7 @@ func checkExtensionMismatch(outputFile string, format string) bool {
 	return false
 }
 
-func validateDirectory(dir string) error {
+func Directory(dir string) error {
 	info, err := os.Stat(dir)
 	if os.IsNotExist(err) {
 		logger.Error("Directory does not exist: %s", dir)
@@ -258,7 +262,7 @@ func validateDirectory(dir string) error {
 	return nil
 }
 
-func validateWaitFor(selector string, flagSet bool) string {
+func WaitFor(selector string, flagSet bool) string {
 	selector = strings.TrimSpace(selector)
 
 	if selector == "" {
@@ -271,7 +275,7 @@ func validateWaitFor(selector string, flagSet bool) string {
 	return selector
 }
 
-func validateUserAgent(ua string, flagSet bool) string {
+func UserAgent(ua string, flagSet bool) string {
 	ua = strings.TrimSpace(ua)
 
 	if ua == "" {
@@ -287,7 +291,7 @@ func validateUserAgent(ua string, flagSet bool) string {
 	return ua
 }
 
-func validateUserDataDir(path string) (string, error) {
+func UserDataDir(path string) (string, error) {
 	path = strings.TrimSpace(path)
 
 	if path == "" {

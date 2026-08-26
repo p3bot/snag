@@ -4,11 +4,20 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package browser
 
 import (
+	"io"
+	"net"
+	"net/http"
 	"testing"
+
+	"github.com/p3bot/snag/internal/logger"
 )
+
+func init() {
+	logger.SetDefault(logger.NewWithWriter(logger.LevelQuiet, io.Discard, false))
+}
 
 func TestDetectBrowserName(t *testing.T) {
 	tests := []struct {
@@ -214,5 +223,46 @@ func TestKillAllBrowsersNoneFound(t *testing.T) {
 	// Count should be 0 or more (depending on if any debug browsers are running)
 	if count < 0 {
 		t.Errorf("Expected non-negative count, got %d", count)
+	}
+}
+
+func TestProbePort_CountsPageTargets(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json/list", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`[
+			{"type":"page","url":"https://example.com"},
+			{"type":"page","url":"https://github.com"},
+			{"type":"service_worker","url":"https://example.com/sw.js"}
+		]`))
+	})
+	go http.Serve(ln, mux)
+
+	port := ln.Addr().(*net.TCPAddr).Port
+	n, err := ProbePort(port)
+	if err != nil {
+		t.Fatalf("ProbePort: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("ProbePort = %d, want 2 page targets", n)
+	}
+}
+
+func TestProbePort_ConnectionRefused(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+
+	_, err = ProbePort(port)
+	if err == nil {
+		t.Fatal("expected error for closed port")
 	}
 }

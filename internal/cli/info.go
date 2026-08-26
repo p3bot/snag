@@ -4,76 +4,31 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package cli
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/go-rod/rod"
 	"github.com/spf13/cobra"
+
+	"github.com/p3bot/snag/internal/browser"
+	"github.com/p3bot/snag/internal/fetch"
+	"github.com/p3bot/snag/internal/logger"
+	"github.com/p3bot/snag/internal/output"
+	"github.com/p3bot/snag/internal/validate"
 )
 
-// PageInfo represents metadata about a web page for JSON output.
-type PageInfo struct {
-	Title     string `json:"title"`
-	URL       string `json:"url"`
-	Domain    string `json:"domain"`
-	Slug      string `json:"slug"`
-	Timestamp string `json:"timestamp"`
-}
-
-// ExtractPageInfo extracts metadata from a rod.Page and returns a PageInfo struct.
-func ExtractPageInfo(page *rod.Page) (*PageInfo, error) {
-	if page == nil {
-		return nil, fmt.Errorf("cannot extract info: page is nil")
+func outputPageInfo(info *fetch.PageInfo, outputFile string) error {
+	if info != nil {
+		info.Slug = output.SlugifyTitle(info.Title, output.MaxSlugLength)
 	}
 
-	pageInfo, err := page.Info()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get page info: %w", err)
-	}
-
-	domain := extractDomain(pageInfo.URL)
-	slug := SlugifyTitle(pageInfo.Title, MaxSlugLength)
-
-	return &PageInfo{
-		Title:     pageInfo.Title,
-		URL:       pageInfo.URL,
-		Domain:    domain,
-		Slug:      slug,
-		Timestamp: time.Now().Format(time.RFC3339),
-	}, nil
-}
-
-// extractDomain extracts the domain from a URL string.
-func extractDomain(urlStr string) string {
-	parsedURL, err := url.Parse(urlStr)
-	if err != nil {
-		return ""
-	}
-
-	host := parsedURL.Host
-
-	// Remove port if present
-	if idx := strings.LastIndex(host, ":"); idx != -1 {
-		host = host[:idx]
-	}
-
-	// Remove www. prefix if present
-	host = strings.TrimPrefix(host, "www.")
-
-	return host
-}
-
-// OutputPageInfo writes the PageInfo as JSON to the specified output (stdout or file).
-func OutputPageInfo(info *PageInfo, outputFile string) error {
 	jsonData, err := json.MarshalIndent(info, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal page info to JSON: %w", err)
@@ -92,44 +47,35 @@ func OutputPageInfo(info *PageInfo, outputFile string) error {
 	return nil
 }
 
-// handleInfoFromURL fetches page info from a URL and outputs as JSON.
 func handleInfoFromURL(cmd *cobra.Command, urlStr string) error {
-	validatedURL, err := validateURL(urlStr)
+	validatedURL, err := validate.URL(urlStr)
 	if err != nil {
 		return err
 	}
 
-	if err := validateTimeout(timeout); err != nil {
+	if err := validate.Timeout(timeout); err != nil {
 		return err
 	}
 
-	if err := validatePort(port); err != nil {
+	if err := validate.Port(port); err != nil {
 		return err
 	}
 
-	outputFile := strings.TrimSpace(output)
+	outputFile := strings.TrimSpace(flagOutput)
 	if cmd.Flags().Changed("output") && outputFile != "" {
-		if err := validateOutputPath(outputFile); err != nil {
+		if err := validate.OutputPath(outputFile); err != nil {
 			return err
 		}
 	}
 
-	validatedUserDataDir := ""
-	if cmd.Flags().Changed("user-data-dir") {
-		validatedDir, err := validateUserDataDir(userDataDir)
-		if err != nil {
-			return err
-		}
-		validatedUserDataDir = validatedDir
+	opts, err := browserOptionsFromFlags(cmd, false, forceHead)
+	if err != nil {
+		return err
 	}
 
-	validatedWaitFor := validateWaitFor(waitFor, cmd.Flags().Changed("wait-for"))
+	validatedWaitFor := validate.WaitFor(waitFor, cmd.Flags().Changed("wait-for"))
 
-	bm := NewBrowserManager(BrowserOptions{
-		Port:          port,
-		ForceHeadless: forceHead,
-		UserDataDir:   validatedUserDataDir,
-	})
+	bm := browser.NewBrowserManager(opts)
 
 	browserMutex.Lock()
 	browserManager = bm
@@ -142,7 +88,7 @@ func handleInfoFromURL(cmd *cobra.Command, urlStr string) error {
 		browserMutex.Unlock()
 	}()
 
-	_, err = bm.Connect()
+	err = bm.Connect()
 	if err != nil {
 		return err
 	}
@@ -152,12 +98,12 @@ func handleInfoFromURL(cmd *cobra.Command, urlStr string) error {
 		return err
 	}
 
-	if closeTab || bm.launchedHeadless {
+	if closeTab || bm.LaunchedHeadless() {
 		defer bm.ClosePage(page)
 	}
 
-	fetcher := NewPageFetcher(page, timeout)
-	_, err = fetcher.Fetch(FetchOptions{
+	fetcher := fetch.NewPageFetcher(page, timeout)
+	_, err = fetcher.Fetch(fetch.FetchOptions{
 		URL:     validatedURL,
 		Timeout: timeout,
 		WaitFor: validatedWaitFor,
@@ -166,15 +112,14 @@ func handleInfoFromURL(cmd *cobra.Command, urlStr string) error {
 		return err
 	}
 
-	pageInfo, err := ExtractPageInfo(page)
+	pageInfo, err := fetch.ExtractPageInfo(page)
 	if err != nil {
 		return err
 	}
 
-	return OutputPageInfo(pageInfo, outputFile)
+	return outputPageInfo(pageInfo, outputFile)
 }
 
-// handleInfoFromTab fetches page info from an existing tab and outputs as JSON.
 func handleInfoFromTab(cmd *cobra.Command) error {
 	tabValue := strings.TrimSpace(tab)
 	if tabValue == "" {
@@ -189,9 +134,9 @@ func handleInfoFromTab(cmd *cobra.Command) error {
 		logger.Warning("--user-data-dir ignored when connecting to existing browser")
 	}
 
-	outputFile := strings.TrimSpace(output)
+	outputFile := strings.TrimSpace(flagOutput)
 	if cmd.Flags().Changed("output") && outputFile != "" {
-		if err := validateOutputPath(outputFile); err != nil {
+		if err := validate.OutputPath(outputFile); err != nil {
 			return err
 		}
 	}
@@ -206,25 +151,23 @@ func handleInfoFromTab(cmd *cobra.Command) error {
 		browserMutex.Unlock()
 	}()
 
-	var page *rod.Page
+	var page *browser.Page
 
-	// Try parsing as tab index
 	if tabIndex, err := strconv.Atoi(tabValue); err == nil {
 		logger.Verbose("Getting info from tab index: %d", tabIndex)
 		page, err = bm.GetTabByIndex(tabIndex)
 		if err != nil {
-			if errors.Is(err, ErrTabIndexInvalid) {
+			if errors.Is(err, browser.ErrTabIndexInvalid) {
 				logger.Error("Tab index out of range")
 				logger.Info("Run 'snag --list-tabs' to see available tabs")
 			}
 			return err
 		}
 	} else {
-		// Pattern matching - but --info only supports single tab
 		logger.Verbose("Getting info from tab matching pattern: %s", tabValue)
 		matchedPages, err := bm.GetTabsByPattern(tabValue)
 		if err != nil {
-			if errors.Is(err, ErrNoTabMatch) {
+			if errors.Is(err, browser.ErrNoTabMatch) {
 				logger.Error("No tab matches pattern '%s'", tabValue)
 				logger.Info("Run 'snag --list-tabs' to see available tabs")
 			}
@@ -240,21 +183,20 @@ func handleInfoFromTab(cmd *cobra.Command) error {
 		page = matchedPages[0]
 	}
 
-	// Wait for selector if specified
 	if cmd.Flags().Changed("wait-for") {
-		validatedWaitFor := validateWaitFor(waitFor, true)
+		validatedWaitFor := validate.WaitFor(waitFor, true)
 		if validatedWaitFor != "" {
-			err := waitForSelector(page, validatedWaitFor, time.Duration(timeout)*time.Second)
+			err := fetch.WaitForSelector(page, validatedWaitFor, time.Duration(timeout)*time.Second)
 			if err != nil {
 				return err
 			}
 		}
 	}
 
-	pageInfo, err := ExtractPageInfo(page)
+	pageInfo, err := fetch.ExtractPageInfo(page)
 	if err != nil {
 		return err
 	}
 
-	return OutputPageInfo(pageInfo, outputFile)
+	return outputPageInfo(pageInfo, outputFile)
 }

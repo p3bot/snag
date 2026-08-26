@@ -4,11 +4,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package main
+package doctor
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/p3bot/snag/internal/browser"
 )
 
 // TestFormatSection tests the section header formatting.
@@ -314,7 +316,7 @@ func TestDoctorReportString_NoBrowser(t *testing.T) {
 		OS:           "linux",
 		Arch:         "amd64",
 		WorkingDir:   "/home/user/snag",
-		BrowserError: ErrBrowserNotFound,
+		BrowserError: browser.ErrBrowserNotFound,
 		DefaultPortStatus: &PortStatus{
 			Port:    9222,
 			Running: false,
@@ -431,7 +433,7 @@ func TestDoctorReportString_EnvVarsSet(t *testing.T) {
 
 // TestCollectDoctorInfo tests the data collection function.
 func TestCollectDoctorInfo(t *testing.T) {
-	report, err := CollectDoctorInfo(9222)
+	report, err := CollectDoctorInfo("dev", 9222)
 
 	if err != nil {
 		t.Fatalf("CollectDoctorInfo() returned error: %v", err)
@@ -476,7 +478,7 @@ func TestCollectDoctorInfo(t *testing.T) {
 
 // TestCollectDoctorInfo_CustomPort tests collection with custom port.
 func TestCollectDoctorInfo_CustomPort(t *testing.T) {
-	report, err := CollectDoctorInfo(9223)
+	report, err := CollectDoctorInfo("dev", 9223)
 
 	if err != nil {
 		t.Fatalf("CollectDoctorInfo() returned error: %v", err)
@@ -496,7 +498,7 @@ func TestCollectDoctorInfo_CustomPort(t *testing.T) {
 
 // TestCollectDoctorInfo_DefaultPort tests that custom status is nil for default port.
 func TestCollectDoctorInfo_DefaultPort(t *testing.T) {
-	report, err := CollectDoctorInfo(9222)
+	report, err := CollectDoctorInfo("dev", 9222)
 
 	if err != nil {
 		t.Fatalf("CollectDoctorInfo() returned error: %v", err)

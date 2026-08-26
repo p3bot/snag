@@ -176,9 +176,9 @@ snag --open-browser --timeout 30                    # Timeout ignored, browser o
 
 **Location:**
 
-- Flag definition: `main.go` (CLI framework)
-- Timeout validation: `validate.go` functions
-- Timeout application: Browser navigation functions in `fetch.go` and `browser.go`
+- Flag definition: `internal/cli/root.go` (`init`)
+- Timeout validation: `internal/validate` (`Timeout`)
+- Timeout application: `internal/browser` (`Page.NavigateTimeout`) and `internal/fetch` (`Fetch`, `WaitForSelector`)
 
 **Processing Flow:**
 
