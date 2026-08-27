@@ -448,14 +448,14 @@ Include this output when reporting issues.
 
 ## Release Process
 
-Follow the comprehensive guide in `.ai/tasks/release-process.md`.
+Follow the comprehensive guide in `.agents/tasks/release-process.md`.
 
 **Quick reference**:
 
 ```bash
 export VERSION="0.0.4"
 go test -v ./...                    # Run tests first
-# Then follow .ai/tasks/release-process.md for full steps
+# Then follow .agents/tasks/release-process.md for full steps
 ```
 
 ## License
@@ -490,8 +490,8 @@ Third-party licenses in `LICENSES/` directory.
 
 - **README.md**: User-facing documentation and usage examples
 - **PROJECT.md**: Current project status and work tracking
-- **.ai/design/design-records/dr-001-snag-design.md**: Comprehensive design decisions and rationale (33 design decisions documented)
-- **.ai/tasks/**: Task documents (code-review, release-process, etc.)
+- **.agents/design/design-records/dr-001-snag-design.md**: Comprehensive design decisions and rationale (33 design decisions documented)
+- **.agents/tasks/**: Task documents (code-review, release-process, etc.)
 - **docs/arguments/**: Complete argument compatibility matrix
 - **docs/testing.md**: Testing documentation and strategies
 - **Repository**: https://github.com/p3bot/snag

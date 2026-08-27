@@ -230,7 +230,7 @@ When changing functionality:
 - Update `README.md` for user-facing changes
 - Update `AGENTS.md` for technical implementation details
 - Update `docs/arguments/*.md` if adding/changing CLI flags
-- Add design decisions to `.ai/design/design-records/` for architectural changes
+- Add design decisions to `.agents/design/design-records/` for architectural changes
 
 ## Testing Philosophy
 
