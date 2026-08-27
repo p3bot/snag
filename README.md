@@ -121,9 +121,6 @@ snag --format html https://example.com
 # Get plain text only (strips all HTML)
 snag --format text https://example.com
 
-# Quiet mode (content only, no logs)
-snag --quiet https://example.com
-
 # Get page metadata as JSON
 snag --info https://example.com
 
@@ -287,8 +284,9 @@ slug=$(snag -i example.com | jq -r '.slug')
 **Notes:**
 
 - `--info` is mutually exclusive with `--format` (always outputs JSON)
-- Output is quiet by default (no log messages, only JSON)
-- Use `--verbose` to see log messages alongside JSON output
+- Fetch progress is verbose-only, so default `--info` output is JSON on stdout without progress lines
+- Warnings and errors during `--info` still go to stderr
+- Use `--verbose` to see progress logs alongside JSON output
 - Only supports single URL or `--tab` (not multiple URLs or `--all-tabs`)
 
 ## Common Scenarios
@@ -300,7 +298,7 @@ slug=$(snag -i example.com | jq -r '.slug')
 snag https://api.example.com/docs > api-reference.md
 
 # Pipe directly to AI assistant
-snag --quiet https://docs.python.org/3/library/os.html | your-ai-tool
+snag https://docs.python.org/3/library/os.html | your-ai-tool
 ```
 
 ### Building a Knowledge Base
@@ -400,12 +398,12 @@ EOF
 # Process URLs from a file (shell loop alternative)
 while read url; do
   filename=$(echo "$url" | sed 's/[^a-zA-Z0-9]/_/g').md
-  snag --quiet -o "$filename" "$url"
+  snag -o "$filename" "$url"
 done < urls.txt
 
 # Combine multiple pages
 for url in https://example.com/page1 https://example.com/page2; do
-  snag --quiet "$url" >> combined.md
+  snag "$url" >> combined.md
   echo -e "\n---\n" >> combined.md
 done
 ```
@@ -416,8 +414,8 @@ done
 # Fetch documentation in CI pipeline
 snag --force-headless --timeout 30 https://docs.example.com > docs.md
 
-# Quiet mode for clean logs
-snag --quiet --force-headless https://example.com > output.md
+# Fetch without progress logs (default)
+snag --force-headless https://example.com > output.md
 ```
 
 ## Authentication
@@ -684,7 +682,7 @@ snag --port 9223 https://example.com
                            Case-insensitive: MD, MARKDOWN, Html, PDF, etc.
 -i, --info                 Output page metadata as JSON (title, URL, domain, slug, timestamp)
                            Mutually exclusive with --format (always outputs JSON)
-                           Output is quiet by default (no log messages)
+                           Fetch progress is verbose-only (JSON on stdout is not mixed with progress)
 ```
 
 ### Page Loading
@@ -707,8 +705,7 @@ snag --port 9223 https://example.com
 ### Logging/Debugging
 
 ```
---verbose                  Enable verbose logging output
--q, --quiet                Suppress all output except errors and content
+--verbose                  Enable verbose logging output (connection, fetch, and batch progress)
 --debug                    Enable debug output with CDP messages
 ```
 

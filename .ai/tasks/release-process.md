@@ -261,7 +261,7 @@ brew reinstall grantcarthew/tap/snag
 snag --version  # Should show new version
 
 # Test basic functionality
-snag --quiet https://example.com
+snag https://example.com
 ```
 
 **Expected results**:

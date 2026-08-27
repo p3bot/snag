@@ -135,9 +135,9 @@ func (bm *BrowserManager) Connect() error {
 		logger.Verbose("Checking for existing browser instance on port %d...", bm.port)
 		if browser, err := bm.connectToExisting(); err == nil {
 			if bm.openBrowser {
-				logger.Success("Connected to existing browser (visible mode)")
+				logger.Verbose("Connected to existing browser (visible mode)")
 			} else {
-				logger.Success("Connected to existing browser instance")
+				logger.Verbose("Connected to existing browser instance")
 			}
 			if bm.userDataDir != "" {
 				logger.Warning("--user-data-dir ignored (browser already running with its own profile)")
@@ -157,7 +157,7 @@ func (bm *BrowserManager) Connect() error {
 	if headless {
 		logger.Verbose("Launching browser in headless mode...")
 	} else {
-		logger.Info("Launching browser in visible mode...")
+		logger.Verbose("Launching browser in visible mode...")
 	}
 
 	browser, err := bm.launchBrowser(headless)
@@ -166,9 +166,9 @@ func (bm *BrowserManager) Connect() error {
 	}
 
 	if headless {
-		logger.Success("%s launched in headless mode", bm.browserName)
+		logger.Verbose("%s launched in headless mode", bm.browserName)
 	} else {
-		logger.Success("%s launched in visible mode", bm.browserName)
+		logger.Verbose("%s launched in visible mode", bm.browserName)
 	}
 
 	bm.browser = browser

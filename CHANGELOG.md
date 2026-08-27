@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- Successful fetch progress (browser launched/connected, fetching, fetched successfully, batch counters) is silent by default; use `--verbose` to print it. Warnings, error recovery hints, and result announcements (generated filename, saved-to, browser opened) still print
+- Removed `--quiet` / `-q`; passing them is an unknown-flag error
+- `--info` no longer forces errors-only stderr; warnings, recovery hints, and save announcements print; fetch progress stays verbose-only
+
 ### Changed
 
 - Layout is now `cmd/snag` plus `internal/` packages (no root `package main`)

@@ -111,7 +111,7 @@ All output flags work normally with `--wait-for`:
 
 - `--port` - Remote debugging port
 - `--close-tab` - Close tab after fetching (works with `--tab`)
-- `--verbose` / `--quiet` / `--debug` - Logging levels
+- `--verbose` / `--debug` - Logging levels
 - `--user-agent` - Set user agent for new pages (ignored for existing tabs)
 - `--user-data-dir` - Custom browser profile, wait for selector
 

@@ -122,7 +122,6 @@ All logging flags work normally with `--user-agent`:
 | Combination                  | Behavior                                                   |
 | ---------------------------- | ---------------------------------------------------------- |
 | `--user-agent` + `--verbose` | Works normally - Verbose logs may show UA being set        |
-| `--user-agent` + `--quiet`   | Works normally - Suppresses non-error messages             |
 | `--user-agent` + `--debug`   | Works normally - Debug logs show CDP messages including UA |
 
 ## Help and Version Interactions

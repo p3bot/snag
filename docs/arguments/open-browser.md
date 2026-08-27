@@ -111,7 +111,6 @@ All logging flags work normally:
 | Combination                    | Behavior                                                   |
 | ------------------------------ | ---------------------------------------------------------- |
 | `--open-browser` + `--verbose` | Works normally (show verbose logs during browser launch)   |
-| `--open-browser` + `--quiet`   | Works normally (suppress logs during browser launch)       |
 | `--open-browser` + `--debug`   | Works normally (show debug/CDP logs during browser launch) |
 
 #### Examples

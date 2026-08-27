@@ -147,7 +147,6 @@ All work normally:
 All work normally:
 
 - `--verbose`: Format output, verbose logs to stderr
-- `--quiet`: Format output, suppress logs (errors only)
 - `--debug`: Format output, debug logs to stderr
 
 #### Examples

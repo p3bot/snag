@@ -84,7 +84,7 @@ For complete argument validation rules, interaction matrices, error messages, an
 - **Browser**: [Open Browser](arguments/open-browser.md) | [Force Headless](arguments/force-headless.md) | [List Tabs](arguments/list-tabs.md) | [Close Tab](arguments/close-tab.md) | [Kill Browser](arguments/kill-browser.md)
 - **Page Control**: [Wait For](arguments/wait-for.md) | [Timeout](arguments/timeout.md) | [Port](arguments/port.md)
 - **Request**: [User Agent](arguments/user-agent.md) | [User Data Dir](arguments/user-data-dir.md)
-- **Logging**: [Verbose](arguments/verbose.md) | [Quiet](arguments/quiet.md) | [Debug](arguments/debug.md)
+- **Logging**: [Verbose](arguments/verbose.md) | [Debug](arguments/debug.md)
 - **Info**: [Help](arguments/help.md) | [Version](arguments/version.md) | [Doctor](arguments/doctor.md)
 
 The design record documents **WHY** decisions were made; the argument specs document **HOW** they work.
@@ -211,8 +211,7 @@ snag [options] <url>
 **Logging/Debugging:**
 
 ```
-  --verbose                  Enable verbose logging output
-  -q, --quiet                Suppress all output except errors and content
+  --verbose                  Enable verbose logging output (connection, fetch, and batch progress)
   --debug                    Enable debug output
 ```
 
@@ -569,7 +568,7 @@ $ snag https://example.com
 
 - **Decision**: Use 21 arguments with standard flag ordering: `snag [options] <url>`
 - **Rationale**:
-  - Essential CLI features: `--version`, `--quiet`, `--user-agent`, `--format`
+  - Essential CLI features: `--version`, `--verbose`, `--user-agent`, `--format`
   - Standard flag-then-argument pattern keeps implementation simple
   - Avoids parsing complexity of position-independent arguments
   - Consistent with most CLI tools (curl, wget, etc.)
@@ -740,9 +739,9 @@ $ snag https://example.com
   - **stdout**: Content only (HTML/Markdown) - enables piping
   - **stderr**: All logs, warnings, errors, progress indicators
 - **Log Levels**:
-  - **Quiet** (`--quiet`): Only errors to stderr (all error types, no warnings)
-  - **Normal** (default): Key operations with emoji indicators
-  - **Verbose** (`--verbose`): Detailed operation logs
+  - **Quiet**: Internal errors-only level (no `--quiet` flag)
+  - **Normal** (default): Warnings, errors, and result announcements. Connection, fetch, and batch progress is silent
+  - **Verbose** (`--verbose`): Progress (launched/connected, fetching, batch counters) plus operational detail
   - **Debug** (`--debug`): Everything + CDP messages, timing info
 - **Color Support**:
   - Auto-detect TTY: `isatty.IsTerminal(os.Stderr.Fd())`
@@ -755,26 +754,19 @@ $ snag https://example.com
 - **Format Examples**:
 
   ```
-  Normal mode:
-  Connecting to Chrome on port 9222...
-  ✓ Connected to existing Chrome instance
+  Normal mode (stderr; stdout is content only):
+  (empty on a successful stdout fetch)
+  ✓ Saved to output.md (12.5 KB)     # file output only
+  Filename: 2026-08-27-example.pdf   # auto-generated binary names
+
+  Verbose mode (`--verbose`) adds progress:
+  Chrome launched in headless mode
   Fetching https://example.com...
-  ✓ Success (12.5 KB)
+  Navigating to https://example.com (timeout: 30s)...
+  Fetched successfully
 
-  Verbose mode:
-  Connecting to Chrome on port 9222...
-  ✓ Connected to existing Chrome instance
-  Navigating to https://example.com...
-  Waiting for page load (timeout: 30s)...
-  ✓ Page loaded (2.3s)
-  Extracting HTML content...
-  ✓ Extracted 45.2 KB HTML
-  Converting to Markdown...
-  ✓ Converted to 12.5 KB Markdown
-  ✓ Success
-
-  Quiet mode:
-  (no output unless error occurs)
+  Quiet (internal LevelQuiet, no CLI flag):
+  (errors only)
   ```
 
 - **No Timestamps**: CLI tools are short-lived, timestamps add noise
@@ -1428,7 +1420,7 @@ $ snag https://example.com
 
   # With logging
   snag --kill-browser --verbose
-  snag --kill-browser --quiet
+  snag --kill-browser --debug
   ```
 
 **See Also**: For complete flag specification, see [arguments/kill-browser.md](arguments/kill-browser.md)
@@ -1440,7 +1432,7 @@ $ snag https://example.com
   - Displays diagnostic information about snag's environment and exits immediately
   - Exit code 0 (always success, never fails)
   - Priority: `--help` > `--version` > `--doctor` > `--kill-browser` > all other flags
-  - Works with `--port`, `--verbose`, `--quiet`, `--debug`
+  - Works with `--port`, `--verbose`, `--debug`
   - Silently ignores all other flags
 - **Diagnostic Information Displayed**:
   - **Version Information**: snag version (current + latest from GitHub), Go version, OS/Arch

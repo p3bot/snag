@@ -12,7 +12,6 @@
 **Multiple Flag Conflicts:**
 
 - Multiple `--verbose` flags → Last flag honored (standard behavior)
-- `--verbose` + `--quiet` → Error: mutually exclusive
 - `--verbose` + `--debug` → Error: mutually exclusive
 - Only one logging level flag can be used at a time
 
@@ -21,11 +20,11 @@
 **Logging Level:**
 
 - Enables verbose logging output to stderr
-- Shows additional information about operations:
-  - Browser connection details
-  - Page navigation steps
-  - Content conversion progress
-  - File writing confirmations
+- Restores fetch progress that is silent by default:
+  - Browser launched/connected
+  - Fetching URL / fetched successfully
+  - Batch counters
+  - Navigation, conversion, and other operational detail
 - Does not affect stdout content output
 
 **Basic Usage:**
@@ -35,12 +34,11 @@ snag https://example.com --verbose
 ```
 
 - Outputs page content to stdout (as normal)
-- Logs verbose messages to stderr:
-  - "Connecting to Chrome on port 9222..."
-  - "Navigating to https://example.com..."
-  - "Waiting for page load..."
-  - "Converting HTML to Markdown..."
-  - "Content written to stdout"
+- Logs verbose messages to stderr, including:
+  - "Chrome launched in headless mode" (or connected to an existing browser)
+  - "Fetching https://example.com..."
+  - "Navigating to https://example.com (timeout: 30s)..."
+  - "Fetched successfully"
 
 **Tab Listing Behavior:**
 
@@ -58,14 +56,11 @@ snag --list-tabs --verbose
 
 **Logging Level Flags (Mutually Exclusive):**
 
-| Combination                 | Result  | Error Message                                                                                                           |
-| --------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `--verbose`                 | Verbose | (Valid - verbose mode)                                                                                                  |
-| `--verbose --quiet`         | Error   | `if any flags in the group [quiet verbose debug] are set none of the others can be; [quiet verbose] were all set`       |
-| `--quiet --verbose`         | Error   | `if any flags in the group [quiet verbose debug] are set none of the others can be; [quiet verbose] were all set`       |
-| `--verbose --debug`         | Error   | `if any flags in the group [quiet verbose debug] are set none of the others can be; [debug verbose] were all set`       |
-| `--debug --verbose`         | Error   | `if any flags in the group [quiet verbose debug] are set none of the others can be; [debug verbose] were all set`       |
-| `--verbose --quiet --debug` | Error   | `if any flags in the group [quiet verbose debug] are set none of the others can be; [debug quiet verbose] were all set` |
+| Combination         | Result  | Error Message                                                                                                     |
+| ------------------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
+| `--verbose`         | Verbose | (Valid - verbose mode)                                                                                            |
+| `--verbose --debug` | Error   | `if any flags in the group [verbose debug] are set none of the others can be; [debug verbose] were all set`       |
+| `--debug --verbose` | Error   | `if any flags in the group [verbose debug] are set none of the others can be; [debug verbose] were all set`       |
 
 **All Other Flags:**
 
@@ -96,9 +91,7 @@ snag --list-tabs --verbose                          # Verbose tab listing
 **Invalid (Mutually Exclusive):**
 
 ```bash
-snag https://example.com --verbose --quiet          # Error: mutually exclusive
 snag https://example.com --verbose --debug          # Error: mutually exclusive
-snag https://example.com --verbose --quiet --debug  # Error: mutually exclusive
 ```
 
 #### Implementation Details
@@ -111,15 +104,15 @@ snag https://example.com --verbose --quiet --debug  # Error: mutually exclusive
 
 **Processing:**
 
-1. Cobra validates that only one logging flag is present (mutually exclusive)
+1. Cobra validates that `--verbose` and `--debug` are not both present (mutually exclusive)
 2. Check if `--verbose` flag is set
 3. Initialize logger with verbose level
 4. All subsequent operations use verbose logging
 
 **Logging Behavior:**
 
-- Normal output: Important messages only
-- Verbose output: All operational details
+- Default: warnings, errors, and result announcements; connection, fetch, and batch progress is silent
+- Verbose: those default lines plus connection, fetch, and batch progress, and operational detail
 - Logs go to stderr (stdout reserved for content)
 
 ---

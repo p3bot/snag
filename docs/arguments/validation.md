@@ -30,7 +30,7 @@ All string arguments are trimmed using `strings.TrimSpace()` after reading from 
 
 **Mutually Exclusive Flags:**
 
-- **Logging flags** (`--verbose`, `--quiet`, `--debug`) are mutually exclusive
+- **Logging flags** (`--verbose`, `--debug`) are mutually exclusive
 - Using multiple logging flags together results in an error
 - Only one logging level flag can be used at a time
 
@@ -39,7 +39,7 @@ All string arguments are trimmed using `strings.TrimSpace()` after reading from 
 ```bash
 snag -o file1.md -o file2.md https://example.com  # Uses file2.md (last flag wins)
 snag --port 9222 --port 9223 https://example.com  # Uses port 9223 (last flag wins)
-snag --quiet --verbose https://example.com        # Error: mutually exclusive
+snag --verbose --debug https://example.com        # Error: mutually exclusive
 ```
 
 ### Priority Order for Special Flags
@@ -56,7 +56,7 @@ Certain flags override all others and exit immediately:
 
 **Current implementation order in `internal/cli/root.go` (`runCobra`):**
 
-1. Cobra validates logging flags are mutually exclusive (`--quiet`, `--verbose`, `--debug`)
+1. Cobra validates logging flags are mutually exclusive (`--verbose`, `--debug`)
 2. Initialize logger with selected logging level
 3. Handle `--help` → exit early (handled by CLI framework)
 4. Handle `--version` → exit early (handled by CLI framework)

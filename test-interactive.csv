@@ -47,7 +47,7 @@ Batch URL Operations,Load from comprehensive URL file,ls,,./snag --force-headles
 Batch URL Operations,URL file with invalid URLs,ls,,./snag --force-headless -d . --url-file testdata/urls-invalid.txt
 Batch URL Operations,URL file + inline URLs,ls,,./snag --force-headless -d . --url-file testdata/urls-small.txt https://httpbin.org/html
 Logging,Verbose output,file:verbose.md,,./snag --verbose -o verbose.md https://example.com
-Logging,Quiet output (-q),file:quiet.md,,./snag -q -o quiet.md https://example.com
+Logging,Default progress silent,file:default.md,,./snag -o default.md https://example.com
 Logging,Debug output,file:debug.md,,./snag --debug -o debug.md https://example.com
 Combined & Regression,Many flags together,ls,,./snag -f html -d . --verbose --timeout 45 -w body https://example.com
 Combined & Regression,Tab with many options,ls,tabs,./snag -t 1 -f pdf -d . --verbose --timeout 30
@@ -65,6 +65,7 @@ Error Tests,Conflicting output flags (-o and -d),error,,./snag -o test.md -d . h
 Error Tests,All-tabs with URL argument,error,tabs,./snag --all-tabs https://example.com
 Error Tests,Tab with URL argument,error,tabs,./snag -t 1 https://example.com
 Error Tests,Invalid format,error,,./snag -f invalid https://example.com
+Error Tests,Unknown quiet flag,error,,./snag --quiet https://example.com
 Error Tests,Invalid tab index,error,tabs,./snag -t 999
 Error Tests,Invalid URL,error,,./snag not-a-url
 Error Tests,--output with multiple URLs,error,,./snag --force-headless -o output.md https://example.com https://go.dev

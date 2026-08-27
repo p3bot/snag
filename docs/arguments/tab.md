@@ -153,7 +153,6 @@ snag -t "(github|gitlab)\.com"                  # Regex: github.com or gitlab.co
 | Combination           | Behavior                                                    |
 | --------------------- | ----------------------------------------------------------- |
 | `--tab` + `--verbose` | Works normally - verbose logging of tab selection and fetch |
-| `--tab` + `--quiet`   | Works normally - suppress non-error messages                |
 | `--tab` + `--debug`   | Works normally - debug logging of tab operations            |
 
 #### Examples

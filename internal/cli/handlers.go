@@ -277,7 +277,7 @@ func handleAllTabs(cmd *cobra.Command) error {
 
 	timestamp := time.Now()
 
-	logger.Info("Processing %d tabs...", len(tabs))
+	logger.Verbose("Processing %d tabs...", len(tabs))
 
 	successCount := 0
 	failureCount := 0
@@ -288,7 +288,7 @@ func handleAllTabs(cmd *cobra.Command) error {
 			continue
 		}
 
-		logger.Info("[%d/%d] Processing: %s", tab.Index, len(tabs), tab.URL)
+		logger.Verbose("[%d/%d] Processing: %s", tab.Index, len(tabs), tab.URL)
 
 		page, err := bm.GetTabByIndex(tab.Index)
 		if err != nil {
@@ -339,7 +339,7 @@ func handleAllTabs(cmd *cobra.Command) error {
 		}
 	}
 
-	logger.Success("Batch complete: %d succeeded, %d failed", successCount, failureCount)
+	logger.Verbose("Batch complete: %d succeeded, %d failed", successCount, failureCount)
 
 	if failureCount > 0 {
 		return fmt.Errorf("batch processing completed with %d failures", failureCount)
@@ -428,7 +428,7 @@ func handleTabFetch(cmd *cobra.Command) error {
 			}
 			return err
 		}
-		logger.Success("Connected to tab [%d] from sorted order (by URL)", tabIndex)
+		logger.Verbose("Connected to tab [%d] from sorted order (by URL)", tabIndex)
 	} else {
 		// Pattern matching
 		logger.Verbose("Fetching from tab matching pattern: %s", tabValue)
@@ -443,7 +443,7 @@ func handleTabFetch(cmd *cobra.Command) error {
 
 		if len(matchedPages) == 1 {
 			page = matchedPages[0]
-			logger.Success("Connected to tab matching pattern: %s", tabValue)
+			logger.Verbose("Connected to tab matching pattern: %s", tabValue)
 		} else {
 			multipleMatches = true
 			if cmd.Flags().Changed("output") {
@@ -451,7 +451,7 @@ func handleTabFetch(cmd *cobra.Command) error {
 				logger.Info("Pattern '%s' matched %d tabs", tabValue, len(matchedPages))
 				return ErrOutputFlagConflict
 			}
-			logger.Info("Pattern '%s' matched %d tabs", tabValue, len(matchedPages))
+			logger.Verbose("Pattern '%s' matched %d tabs", tabValue, len(matchedPages))
 		}
 	}
 
@@ -465,7 +465,7 @@ func handleTabFetch(cmd *cobra.Command) error {
 		return fmt.Errorf("failed to get page info: %w", err)
 	}
 
-	logger.Info("Fetching content from: %s", info.URL)
+	logger.Verbose("Fetching content from: %s", info.URL)
 
 	if validatedWaitFor != "" {
 		err := fetch.WaitForSelector(page, validatedWaitFor, time.Duration(timeout)*time.Second)
@@ -532,7 +532,7 @@ func processBatchTabs(pages []*browser.Page, config *Config) error {
 			continue
 		}
 
-		logger.Info("[%d/%d] Processing: %s", current, total, info.URL)
+		logger.Verbose("[%d/%d] Processing: %s", current, total, info.URL)
 
 		if config.WaitFor != "" {
 			err := fetch.WaitForSelector(page, config.WaitFor, time.Duration(config.Timeout)*time.Second)
@@ -569,7 +569,7 @@ func processBatchTabs(pages []*browser.Page, config *Config) error {
 		}
 	}
 
-	logger.Success("Batch complete: %d succeeded, %d failed", successCount, failureCount)
+	logger.Verbose("Batch complete: %d succeeded, %d failed", successCount, failureCount)
 
 	if failureCount > 0 {
 		return fmt.Errorf("batch processing completed with %d failures", failureCount)
@@ -605,7 +605,7 @@ func handleTabRange(cmd *cobra.Command, bm *browser.BrowserManager, start, end i
 		return err
 	}
 
-	logger.Info("Processing %d tabs from range [%d-%d]...", len(pages), start, end)
+	logger.Verbose("Processing %d tabs from range [%d-%d]...", len(pages), start, end)
 
 	config := &Config{
 		Format:    outputFormat,
@@ -638,7 +638,7 @@ func handleTabPatternBatch(cmd *cobra.Command, pages []*browser.Page, pattern st
 		return err
 	}
 
-	logger.Info("Processing %d tabs matching pattern '%s'...", len(pages), pattern)
+	logger.Verbose("Processing %d tabs matching pattern '%s'...", len(pages), pattern)
 
 	config := &Config{
 		Format:    outputFormat,
@@ -688,7 +688,7 @@ func handleOpenURLsInBrowser(cmd *cobra.Command, urls []string) error {
 		return fmt.Errorf("no valid URLs provided")
 	}
 
-	logger.Info("Opening %d valid URL%s in browser...", len(validatedURLs), plural(len(validatedURLs)))
+	logger.Verbose("Opening %d valid URL%s in browser...", len(validatedURLs), plural(len(validatedURLs)))
 
 	opts, err := browserOptionsFromFlags(cmd, true, false)
 	if err != nil {
@@ -713,7 +713,7 @@ func handleOpenURLsInBrowser(cmd *cobra.Command, urls []string) error {
 
 	for i, validatedURL := range validatedURLs {
 		current := i + 1
-		logger.Info("[%d/%d] Opening: %s", current, len(validatedURLs), validatedURL)
+		logger.Verbose("[%d/%d] Opening: %s", current, len(validatedURLs), validatedURL)
 
 		page, err := bm.NewPage()
 		if err != nil {
@@ -727,7 +727,7 @@ func handleOpenURLsInBrowser(cmd *cobra.Command, urls []string) error {
 			continue
 		}
 
-		logger.Success("[%d/%d] Opened: %s", current, len(validatedURLs), validatedURL)
+		logger.Verbose("[%d/%d] Opened: %s", current, len(validatedURLs), validatedURL)
 	}
 
 	logger.Success("Browser will remain open with %d tabs", len(validatedURLs))
@@ -789,7 +789,7 @@ func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
 		return validate.ErrNoValidURLs
 	}
 
-	logger.Info("Processing %d URL%s...", len(validatedURLs), plural(len(validatedURLs)))
+	logger.Verbose("Processing %d URL%s...", len(validatedURLs), plural(len(validatedURLs)))
 
 	bm := browser.NewBrowserManager(opts)
 	browserMutex.Lock()
@@ -822,7 +822,7 @@ func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
 		current := i + 1
 		total := len(validatedURLs)
 
-		logger.Info("[%d/%d] Fetching: %s", current, total, validatedURL)
+		logger.Verbose("[%d/%d] Fetching: %s", current, total, validatedURL)
 
 		page, err := bm.NewPage()
 		if err != nil {
@@ -877,7 +877,7 @@ func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
 		successCount++
 	}
 
-	logger.Success("Batch complete: %d succeeded, %d failed", successCount, failureCount)
+	logger.Verbose("Batch complete: %d succeeded, %d failed", successCount, failureCount)
 
 	if failureCount > 0 {
 		return fmt.Errorf("batch processing completed with %d failures", failureCount)

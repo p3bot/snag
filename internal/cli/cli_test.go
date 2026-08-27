@@ -8,6 +8,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -634,6 +635,7 @@ func TestBrowser_OutputToFile(t *testing.T) {
 	contentStr := string(content)
 	assertContains(t, contentStr, "# Example Heading")
 	assertContains(t, contentStr, "This is a simple paragraph")
+	assertContains(t, stderr, "Saved to")
 
 	// Verify success message in stderr
 	if len(stderr) > 0 {
@@ -926,7 +928,7 @@ func TestBrowser_CloseTab(t *testing.T) {
 	_ = output
 }
 
-// TestBrowser_VerboseOutput tests --verbose flag
+// TestBrowser_VerboseOutput tests --verbose restores fetch progress on stderr
 func TestBrowser_VerboseOutput(t *testing.T) {
 	if !isBrowserAvailable() {
 		t.Skip("Browser not available, skipping browser integration test")
@@ -940,18 +942,16 @@ func TestBrowser_VerboseOutput(t *testing.T) {
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
 
-	// Should successfully fetch content
 	assertContains(t, stdout, "# Example Heading")
-
-	// Verbose mode should produce more stderr output
-	// Stderr should have verbose logging messages
-	if len(stderr) == 0 {
-		t.Log("verbose mode produced no stderr output (may be expected)")
+	assertContains(t, stderr, "Fetching")
+	assertContains(t, stderr, "Fetched successfully")
+	if !strings.Contains(stderr, "launched") && !strings.Contains(stderr, "Connected") {
+		t.Errorf("expected verbose stderr to mention launched or connected, got:\n%s", stderr)
 	}
 }
 
-// TestBrowser_QuietMode tests --quiet flag
-func TestBrowser_QuietMode(t *testing.T) {
+// TestBrowser_DefaultSilentProgress tests that a successful fetch prints no progress on stderr
+func TestBrowser_DefaultSilentProgress(t *testing.T) {
 	if !isBrowserAvailable() {
 		t.Skip("Browser not available, skipping browser integration test")
 	}
@@ -959,20 +959,104 @@ func TestBrowser_QuietMode(t *testing.T) {
 	server := startTestServer(t)
 	url := server.URL + "/simple.html"
 
-	stdout, stderr, err := runSnag("--quiet", url)
+	stdout, stderr, err := runSnag(url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
 
-	// Should successfully fetch content
 	assertContains(t, stdout, "# Example Heading")
-
-	// Quiet mode should minimize stderr output (only errors)
-	// Less stderr than normal mode
-	_ = stderr
+	assertNotContains(t, stderr, "launched")
+	assertNotContains(t, stderr, "Connected to existing")
+	assertNotContains(t, stderr, "Fetching")
+	assertNotContains(t, stderr, "Fetched successfully")
 }
 
-// TestBrowser_DebugMode tests --debug flag
+func TestCLI_UnknownQuietFlag(t *testing.T) {
+	stdout, stderr, err := runSnag("--quiet", "https://example.com")
+	assertError(t, err)
+	assertExitCode(t, err, 1)
+	assertContains(t, stderr, "unknown flag: --quiet")
+	_ = stdout
+
+	stdout, stderr, err = runSnag("-q", "https://example.com")
+	assertError(t, err)
+	assertExitCode(t, err, 1)
+	assertContains(t, stderr, "unknown shorthand flag: 'q' in -q")
+	_ = stdout
+}
+
+func TestCLI_VerboseDebugMutuallyExclusive(t *testing.T) {
+	stdout, stderr, err := runSnag("--verbose", "--debug", "https://example.com")
+	assertError(t, err)
+	assertExitCode(t, err, 1)
+	assertContains(t, stderr, "if any flags in the group [verbose debug] are set none of the others can be")
+	assertContains(t, stderr, "debug")
+	assertContains(t, stderr, "verbose")
+	_ = stdout
+}
+
+func TestBrowser_InfoJSON(t *testing.T) {
+	if !isBrowserAvailable() {
+		t.Skip("Browser not available, skipping browser integration test")
+	}
+
+	server := startTestServer(t)
+	url := server.URL + "/simple.html"
+
+	stdout, stderr, err := runSnag("--info", url)
+
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+
+	var payload map[string]string
+	if unmarshalErr := json.Unmarshal([]byte(stdout), &payload); unmarshalErr != nil {
+		t.Fatalf("expected JSON on stdout: %v\n%s", unmarshalErr, stdout)
+	}
+	if payload["title"] != "Simple Test Page" {
+		t.Errorf("title = %q, want Simple Test Page", payload["title"])
+	}
+	for _, key := range []string{"url", "domain", "slug", "timestamp"} {
+		if payload[key] == "" {
+			t.Errorf("expected %s in --info JSON, got: %s", key, stdout)
+		}
+	}
+
+	assertNotContains(t, stderr, "launched")
+	assertNotContains(t, stderr, "Connected to existing")
+	assertNotContains(t, stderr, "Fetching")
+	assertNotContains(t, stderr, "Fetched successfully")
+}
+
+func TestBrowser_InfoWarningsAndSave(t *testing.T) {
+	if !isBrowserAvailable() {
+		t.Skip("Browser not available, skipping browser integration test")
+	}
+
+	server := startTestServer(t)
+	url := server.URL + "/simple.html"
+	outputPath := filepath.Join(t.TempDir(), "info.json")
+
+	stdout, stderr, err := runSnag("--info", "--force-headless", "--close-tab", "-o", outputPath, url)
+
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+	assertContains(t, stderr, "--close-tab is ignored in headless mode")
+	assertContains(t, stderr, "Saved info to")
+	assertNotContains(t, stderr, "Fetching")
+	if strings.TrimSpace(stdout) != "" {
+		t.Errorf("expected empty stdout when saving --info, got: %s", stdout)
+	}
+
+	content, readErr := os.ReadFile(outputPath)
+	if readErr != nil {
+		t.Fatalf("failed to read info file: %v", readErr)
+	}
+	if !json.Valid(content) {
+		t.Errorf("expected JSON in %s, got: %s", outputPath, content)
+	}
+}
+
+// TestBrowser_DebugMode tests --debug includes verbose progress plus [DEBUG] lines
 func TestBrowser_DebugMode(t *testing.T) {
 	if !isBrowserAvailable() {
 		t.Skip("Browser not available, skipping browser integration test")
@@ -986,13 +1070,12 @@ func TestBrowser_DebugMode(t *testing.T) {
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
 
-	// Should successfully fetch content
 	assertContains(t, stdout, "# Example Heading")
-
-	// Debug mode should produce detailed stderr output
-	// Stderr should have debug logging messages
-	if len(stderr) == 0 {
-		t.Log("debug mode produced no stderr output (may be expected)")
+	assertContains(t, stderr, "Fetching")
+	assertContains(t, stderr, "Fetched successfully")
+	assertContains(t, stderr, "[DEBUG]")
+	if !strings.Contains(stderr, "launched") && !strings.Contains(stderr, "Connected") {
+		t.Errorf("expected debug stderr to mention launched or connected, got:\n%s", stderr)
 	}
 }
 
@@ -1190,6 +1273,7 @@ func TestBrowser_TabOutOfRange(t *testing.T) {
 	assertError(t, err)
 	assertExitCode(t, err, 1)
 	assertContains(t, stderr, "Tab index out of range")
+	assertContains(t, stderr, "snag --list-tabs")
 
 	_ = stdout
 }
@@ -1282,6 +1366,8 @@ func TestBrowser_PDFFormat(t *testing.T) {
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
 
+	assertContains(t, stderr, "Saved to")
+
 	// Stdout should be empty (content written to file)
 	if len(strings.TrimSpace(stdout)) > 0 {
 		t.Errorf("expected empty stdout when using -o flag, got: %s", stdout)
@@ -1302,8 +1388,40 @@ func TestBrowser_PDFFormat(t *testing.T) {
 	if len(content) < 100 {
 		t.Errorf("expected PDF file to have content, got only %d bytes", len(content))
 	}
+}
 
-	_ = stderr
+func TestBrowser_PDFAutoFilename(t *testing.T) {
+	if !isBrowserAvailable() {
+		t.Skip("Browser not available, skipping browser integration test")
+	}
+
+	server := startTestServer(t)
+	url := server.URL + "/simple.html"
+	tmpDir := t.TempDir()
+
+	cmd := exec.Command(snagBin, "--format", "pdf", url)
+	cmd.Dir = tmpDir
+	stdoutBytes, stderrBytes, err := runCommand(cmd)
+	stdout := string(stdoutBytes)
+	stderr := string(stderrBytes)
+
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+	assertContains(t, stderr, "Filename:")
+	if len(strings.TrimSpace(stdout)) > 0 {
+		t.Errorf("expected empty stdout for auto-generated PDF, got: %s", stdout)
+	}
+
+	files, err := os.ReadDir(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to read temp directory: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected 1 PDF in working directory, got %d", len(files))
+	}
+	if !strings.HasSuffix(files[0].Name(), ".pdf") {
+		t.Errorf("expected .pdf file, got: %s", files[0].Name())
+	}
 }
 
 // TestBrowser_PNGFormat tests --format png creates screenshot
@@ -1373,6 +1491,8 @@ func TestBrowser_OutputDir(t *testing.T) {
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
+
+	assertContains(t, stderr, "Saved to")
 
 	// When using -d, content goes to file, not stdout
 	// Stdout should be empty (or just contain logs)
@@ -1469,8 +1589,14 @@ func TestCLI_MultipleURLs_FlagOrder(t *testing.T) {
 	// This should now succeed instead of failing
 	assertNoError(t, err)
 
-	output := stdout + stderr
-	assertContains(t, output, "example.com")
+	assertContains(t, stderr, "Saved to")
+	files, readErr := os.ReadDir(tmpDir)
+	if readErr != nil {
+		t.Fatalf("failed to read temp directory: %v", readErr)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file in output directory, got %d", len(files))
+	}
 
 	_ = stdout
 }
@@ -1493,7 +1619,7 @@ func TestCLI_MultipleURLs_WithOutput(t *testing.T) {
 // TestCLI_MultipleURLs_WithCloseTab tests --close-tab works with multiple URLs
 func TestCLI_MultipleURLs_WithCloseTab(t *testing.T) {
 	tmpDir := t.TempDir()
-	stdout, stderr, err := runSnag("--force-headless", "--close-tab", "-d", tmpDir, "https://example.com", "https://go.dev")
+	stdout, stderr, err := runSnag("--verbose", "--force-headless", "--close-tab", "-d", tmpDir, "https://example.com", "https://go.dev")
 
 	// Should succeed - --close-tab is now supported with multiple URLs
 	assertNoError(t, err)
@@ -1629,7 +1755,7 @@ func TestBrowser_MultipleURLs_Inline(t *testing.T) {
 	// Create temporary directory for output
 	tmpDir := t.TempDir()
 
-	stdout, stderr, err := runSnag("--force-headless", "-d", tmpDir, url1, url2)
+	stdout, stderr, err := runSnag("--verbose", "--force-headless", "-d", tmpDir, url1, url2)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1686,7 +1812,7 @@ func TestBrowser_MultipleURLs_FromFile(t *testing.T) {
 	// Create temporary directory for output
 	tmpDir := t.TempDir()
 
-	stdout, stderr, err := runSnag("--force-headless", "-d", tmpDir, "--url-file", tmpFile.Name())
+	stdout, stderr, err := runSnag("--verbose", "--force-headless", "-d", tmpDir, "--url-file", tmpFile.Name())
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1733,7 +1859,7 @@ func TestBrowser_MultipleURLs_Combined(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Combine file (2 URLs) with inline (1 URL) = 3 total
-	stdout, stderr, err := runSnag("--force-headless", "-d", tmpDir, "--url-file", tmpFile.Name(), url3)
+	stdout, stderr, err := runSnag("--verbose", "--force-headless", "-d", tmpDir, "--url-file", tmpFile.Name(), url3)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1785,10 +1911,9 @@ invalid url with spaces
 	assertNoError(t, err) // Should succeed (2 valid URLs)
 	assertExitCode(t, err, 0)
 
-	// Stderr should show warning about invalid URL
+	// Warning stays on default stderr; batch progress does not
 	assertContains(t, stderr, "URL contains space without comment marker")
-	assertContains(t, stderr, "Processing 2 URLs") // Only 2 valid URLs loaded
-	assertContains(t, stderr, "Batch complete: 2 succeeded, 0 failed")
+	assertNotContains(t, stderr, "Processing 2 URLs")
 
 	_ = stdout
 }
@@ -1848,7 +1973,7 @@ func TestBrowser_URLFile_AutoHTTPS(t *testing.T) {
 
 	// Use testdata/urls-small.txt which has URLs without https://
 	// This will try to fetch https://example.com and https://httpbin.org/html (auto-prepended)
-	stdout, stderr, err := runSnag("--force-headless", "-d", tmpDir, "--url-file", "testdata/urls-small.txt")
+	stdout, stderr, err := runSnag("--verbose", "--force-headless", "-d", tmpDir, "--url-file", "testdata/urls-small.txt")
 
 	// May succeed or fail depending on network access
 	// Just verify the URLs were loaded from file

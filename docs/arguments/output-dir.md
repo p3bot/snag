@@ -125,7 +125,7 @@ All these flags work normally with `-d`:
 - ✅ `--wait-for` - Wait for selector before extraction
 - ✅ `--close-tab` - Close tab after fetching
 - ✅ `--force-headless` - Force headless browser mode
-- ✅ `--verbose` / `--quiet` / `--debug` - Logging levels
+- ✅ `--verbose` / `--debug` - Logging levels
 - ✅ `--user-agent` - Custom user agent (applies to all new pages)
 - ✅ `--user-data-dir` - Custom browser profile
 - ✅ `--port` - Remote debugging port

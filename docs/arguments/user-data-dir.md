@@ -151,7 +151,6 @@ All logging flags work normally with `--user-data-dir`:
 | Combination                     | Behavior       |
 | ------------------------------- | -------------- |
 | `--user-data-dir` + `--verbose` | Works normally |
-| `--user-data-dir` + `--quiet`   | Works normally |
 | `--user-data-dir` + `--debug`   | Works normally |
 
 **Special Cases:**

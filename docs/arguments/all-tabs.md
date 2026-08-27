@@ -40,8 +40,8 @@
 - **Order**: Browser's tab order (same as `--list-tabs` display order)
 - **Error handling**: Continue on error (process all tabs)
 - **Exit code**: 0 if ALL succeed, 1 if ANY fail
-- **Summary**: "Fetched X of Y tabs successfully" (logged at end)
-- **Progress logging**: Log each tab as it's processed
+- **Summary**: `"Batch complete: X succeeded, Y failed"` (verbose only)
+- **Progress logging**: `[n/N] Processing: URL` is verbose; skip warnings, errors, and `Saved to` still print at default
 
 **Special Tab Handling:**
 
@@ -116,7 +116,6 @@
 | Combination                | Behavior                                           |
 | -------------------------- | -------------------------------------------------- |
 | `--all-tabs` + `--verbose` | Works normally - verbose logging of tab processing |
-| `--all-tabs` + `--quiet`   | Works normally - suppress non-error messages       |
 | `--all-tabs` + `--debug`   | Works normally - debug logging of all operations   |
 
 #### Examples
@@ -148,7 +147,6 @@ snag --all-tabs --port 9223 -d ./tabs           # Connect to browser on port 922
 
 # With logging
 snag --all-tabs --verbose                       # Verbose progress logging
-snag --all-tabs --quiet                         # Only show errors
 ```
 
 **Invalid (Errors):**
@@ -260,5 +258,5 @@ func isNonFetchableURL(url string) bool {
 
 - Similar to `--tab` but processes all tabs instead of one
 - Reuses existing fetch, format, and output logic
-- Progress logging critical for user feedback during batch operations
+- Per-tab progress and the batch summary are verbose; default stderr still shows skip warnings, errors, and `Saved to`
 - Continue-on-error ensures maximum data recovery even with partial failures

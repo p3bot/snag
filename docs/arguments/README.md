@@ -26,7 +26,6 @@
 - [**`--list-tabs`** / **`-l`** - List all open tabs](./list-tabs.md)
 - [**`--tab PATTERN`** / **`-t`** - Fetch from existing tab](./tab.md)
 - [**`--verbose`** - Verbose logging](./verbose.md)
-- [**`--quiet`** / **`-q`** - Quiet mode](./quiet.md)
 - [**`--debug`** - Debug logging](./debug.md)
 - [**`--help`** / **`-h`** - Show help](./help.md)
 - [**`--version`** / **`-v`** - Show version](./version.md)
@@ -84,11 +83,10 @@
 
 ### Logging Flags
 
-| Flag        | Aliases | Type | Default | Description                |
-| ----------- | ------- | ---- | ------- | -------------------------- |
-| `--verbose` | -       | Bool | `false` | Enable verbose logging     |
-| `--quiet`   | `-q`    | Bool | `false` | Suppress all except errors |
-| `--debug`   | -       | Bool | `false` | Enable debug output        |
+| Flag        | Aliases | Type | Default | Description                                    |
+| ----------- | ------- | ---- | ------- | ---------------------------------------------- |
+| `--verbose` | -       | Bool | `false` | Enable verbose logging (fetch/connection/batch) |
+| `--debug`   | -       | Bool | `false` | Enable debug output                            |
 
 ### Request Control Flags
 
@@ -144,14 +142,10 @@ These determine the primary operation mode:
 
 | Combination             | Result   |
 | ----------------------- | -------- |
-| No logging flags        | Normal   |
-| `--quiet`               | Quiet    |
+| No logging flags        | Normal (progress silent; warnings, errors, and result announcements print) |
 | `--verbose`             | Verbose  |
 | `--debug`               | Debug    |
-| `--quiet` + `--verbose` | ❌ ERROR |
 | `--debug` + `--verbose` | ❌ ERROR |
-| `--quiet` + `--debug`   | ❌ ERROR |
-| `--verbose` + `--quiet` | ❌ ERROR |
 
 ---
 

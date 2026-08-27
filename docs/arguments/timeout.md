@@ -120,7 +120,6 @@ All browser mode flags work normally with `--timeout`:
 All logging flags work normally:
 
 - `--verbose`: Works normally - verbose logging of timeout behavior
-- `--quiet`: Works normally - suppress timeout messages
 - `--debug`: Works normally - debug logging of timeout behavior
 
 **Miscellaneous:**

@@ -73,7 +73,7 @@
 | `--force-headless` + `--timeout`                     | Works normally | Navigation timeout applies                                                      |
 | `--force-headless` + `--wait-for`                    | Works normally | Selector wait applies                                                           |
 | `--force-headless` + `--user-agent`                  | Works normally | User agent set for headless browser                                             |
-| `--force-headless` + `--verbose`/`--quiet`/`--debug` | Works normally | Logging levels apply                                                            |
+| `--force-headless` + `--verbose`/`--debug`           | Works normally | Logging levels apply                                                            |
 
 #### Examples
 

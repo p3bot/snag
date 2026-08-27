@@ -166,7 +166,6 @@ snag --url-file urls.txt https://example.com https://go.dev
 **Logging Flags:**
 
 - `--verbose`: Works normally - show verbose logs for all URLs
-- `--quiet`: Works normally - suppress all except errors
 - `--debug`: Works normally - show debug logs for all URLs
 
 #### Examples

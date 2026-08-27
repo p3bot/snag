@@ -71,7 +71,6 @@
 | ------------------------------ | -------------- | -------------------------------------------- |
 | `--kill-browser` + `--port`    | Works normally | Kill only browser on specific port           |
 | `--kill-browser` + `--verbose` | Works normally | Verbose logging (show PIDs, process details) |
-| `--kill-browser` + `--quiet`   | Works normally | Quiet mode (silent on success)               |
 | `--kill-browser` + `--debug`   | Works normally | Debug logging (show commands executed)       |
 
 **Flags That ERROR With `--kill-browser` (Conflicting Operations):**
@@ -125,9 +124,6 @@ snag -k --port 9223
 
 # Kill with verbose logging
 snag --kill-browser --verbose
-
-# Kill quietly (silent on success)
-snag --kill-browser --quiet
 
 # Kill with debug logging
 snag --kill-browser --debug

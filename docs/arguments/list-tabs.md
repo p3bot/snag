@@ -54,7 +54,6 @@ snag --list-tabs --verbose
 | --------------------------- | -------------- | -------------------------------------------- |
 | `--list-tabs` + `--port`    | Works normally | Specify which browser instance to connect to |
 | `--list-tabs` + `--verbose` | Works normally | Verbose logging during tab listing           |
-| `--list-tabs` + `--quiet`   | Works normally | Quiet mode (minimal output)                  |
 | `--list-tabs` + `--debug`   | Works normally | Debug/CDP logging during tab listing         |
 
 **Higher Priority Flags (Override):**
@@ -106,9 +105,6 @@ snag --list-tabs --port 9223
 # List tabs with verbose logging
 snag --list-tabs --verbose
 
-# List tabs quietly (minimal output)
-snag --list-tabs --quiet
-
 # List tabs with debug logging
 snag --list-tabs --debug
 ```
@@ -143,7 +139,7 @@ snag --list-tabs
 **How it works:**
 
 1. Check if `--list-tabs` is set (should be checked early, like `--help` and `--version`)
-2. Extract `--port` and logging flags (`--verbose`, `--quiet`, `--debug`)
+2. Extract `--port` and logging flags (`--verbose`, `--debug`)
 3. Silently ignore all other flags (no warnings, no errors)
 4. Connect to existing browser on specified port
 5. If no browser found: Error with helpful hint

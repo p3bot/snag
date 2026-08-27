@@ -108,7 +108,6 @@ var (
 	showVersion bool
 	info        bool
 	verbose     bool
-	quiet       bool
 	debug       bool
 	userAgent   string
 	userDataDir string
@@ -193,8 +192,7 @@ OPTIONS:
   -k, --kill-browser           Kill browser processes with remote debugging enabled
 
       --debug                  Enable debug output
-  -q, --quiet                  Suppress all output except errors and content
-      --verbose                Enable verbose logging output
+      --verbose                Enable verbose logging output (connection, fetch, and batch progress)
 
   -h, --help                   help for snag
   -v, --version                version for snag
@@ -230,11 +228,10 @@ func init() {
 	rootCmd.Flags().BoolVar(&runDoctor, "doctor", false, "Display comprehensive diagnostic information")
 	rootCmd.Flags().BoolVarP(&showVersion, "version", "v", false, "Display version information")
 	rootCmd.Flags().BoolVarP(&info, "info", "i", false, "Output page metadata as JSON (title, URL, domain, slug, timestamp)")
-	rootCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging output")
-	rootCmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress all output except errors and content")
+	rootCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging output (connection, fetch, and batch progress)")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug output")
 
-	rootCmd.MarkFlagsMutuallyExclusive("quiet", "verbose", "debug")
+	rootCmd.MarkFlagsMutuallyExclusive("verbose", "debug")
 
 	rootCmd.SetHelpTemplate(helpTemplate)
 }
@@ -330,8 +327,6 @@ func runCobra(cmd *cobra.Command, args []string) error {
 		level = logger.LevelDebug
 	} else if verbose {
 		level = logger.LevelVerbose
-	} else if quiet || info {
-		level = logger.LevelQuiet
 	}
 
 	logger.SetDefault(logger.New(level))
@@ -453,7 +448,7 @@ func runCobra(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		logger.Info("Opening browser...")
+		logger.Verbose("Opening browser...")
 		bm := browser.NewBrowserManager(opts)
 		return bm.OpenBrowserOnly()
 	}

@@ -98,7 +98,7 @@ snag -d output/ https://example.com https://google.com
 
 **Logging Flags:**
 
-- `--verbose`, `--quiet`, `--debug`: All work normally with `<url>`
+- `--verbose`, `--debug`: All work normally with `<url>`
 
 ## Examples
 

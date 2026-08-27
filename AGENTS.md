@@ -146,12 +146,14 @@ rm -f snag snag-*
 
 **Logging:**
 
-- Use custom Logger with 4 levels (quiet, normal, verbose, debug)
+- Use custom Logger with 4 levels (quiet, normal, verbose, debug). Quiet is internal (errors-only); there is no `--quiet` flag
+- User-facing logging flags: `--verbose` and `--debug` (mutually exclusive)
+- Default (normal): warnings, errors, and result announcements. Connection, fetch, and batch progress is silent
 - Log to stderr only (stdout reserved for content)
-- Success messages: `logger.Success("Connected to existing Chrome instance")`
+- Success messages: `logger.Success("Saved to output.md")`
 - Errors: `logger.Error("Failed to connect")`
-- Info messages: `logger.Info("Fetching https://example.com...")`
-- Verbose: `logger.Verbose("Navigating to URL...")`
+- Info messages: `logger.Info("Filename: %s", path)`
+- Verbose: `logger.Verbose("Fetching https://example.com...")`
 - Debug: `logger.Debug("CDP message: ...")`
 
 **License Headers:**

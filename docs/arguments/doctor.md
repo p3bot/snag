@@ -82,7 +82,6 @@ snag --doctor --verbose
 | ------------------------- | -------------- | ---------------------------------------------- |
 | `--doctor` + `--port`     | Works normally | Check both default (9222) and custom port      |
 | `--doctor` + `--verbose`  | Works normally | Verbose logging during diagnostic operations   |
-| `--doctor` + `--quiet`    | Works normally | Quiet mode (minimal logging)                   |
 | `--doctor` + `--debug`    | Works normally | Debug logging during diagnostic operations     |
 
 **All Other Flags Are SILENTLY IGNORED:**
@@ -139,9 +138,6 @@ snag --doctor --verbose
 
 # With debug logging
 snag --doctor --debug
-
-# With quiet mode
-snag --doctor --quiet
 ```
 
 **Silently Ignores Other Flags:**
@@ -260,7 +256,7 @@ Version Information
 **How it works:**
 
 1. Check if `--doctor` is set (priority chain after `--help` and `--version`)
-2. Extract `--port` and logging flags (`--verbose`, `--quiet`, `--debug`)
+2. Extract `--port` and logging flags (`--verbose`, `--debug`)
 3. Silently ignore all other flags (no warnings, no errors)
 4. Collect diagnostic information:
    - Version info (snag, Go, OS/Arch)

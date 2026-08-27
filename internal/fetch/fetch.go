@@ -43,7 +43,7 @@ func (pf *PageFetcher) Fetch(opts FetchOptions) (string, error) {
 		return "", fmt.Errorf("cannot fetch: page is nil")
 	}
 
-	logger.Info("Fetching %s...", opts.URL)
+	logger.Verbose("Fetching %s...", opts.URL)
 
 	logger.Verbose("Navigating to %s (timeout: %ds)...", opts.URL, opts.Timeout)
 
@@ -90,7 +90,7 @@ func (pf *PageFetcher) Fetch(opts FetchOptions) (string, error) {
 	}
 
 	logger.Debug("Extracted %d bytes of HTML", len(html))
-	logger.Success("Fetched successfully")
+	logger.Verbose("Fetched successfully")
 
 	return html, nil
 }

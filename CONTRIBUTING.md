@@ -118,12 +118,14 @@ go test -v ./internal/cli -run TestBrowser
 - Never panic for expected errors
 
 **Logging:**
-- Use custom Logger with 4 levels (quiet, normal, verbose, debug)
+- Use custom Logger with 4 levels (quiet, normal, verbose, debug). Quiet is internal (errors-only); there is no `--quiet` flag
+- User-facing logging flags: `--verbose` and `--debug` (mutually exclusive)
+- Default (normal): warnings, errors, and result announcements. Connection, fetch, and batch progress is silent
 - Log to stderr only (stdout reserved for content)
-- `logger.Success()` - Success messages
+- `logger.Success()` - Result announcements
 - `logger.Error()` - Errors
-- `logger.Info()` - Info messages
-- `logger.Verbose()` - Verbose details
+- `logger.Info()` - Info messages (recovery hints, filenames)
+- `logger.Verbose()` - Fetch/connection/batch progress and extra detail
 - `logger.Debug()` - CDP/debug messages
 
 **License Headers:**
