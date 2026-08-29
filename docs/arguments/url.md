@@ -71,6 +71,7 @@ snag -d output/ https://example.com https://google.com
 | `<url>` + `--list-tabs`  | `--list-tabs` overrides | `--list-tabs` overrides all other options |
 | `<url>` + `--doctor`     | **Flag ignored**        | Doctor overrides, diagnostics only        |
 | `<url>` + `--kill-browser` | **Error**             | Conflicting operations                    |
+| `<url>` + skill verb         | **Error**             | `"Cannot use a skill flag with URL arguments (conflicting operations)"` |
 
 **Browser Mode:**
 

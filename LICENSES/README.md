@@ -13,12 +13,12 @@ This directory contains the licenses for third-party dependencies used in snag.
 - **License**: MIT License
 - **License File**: rod.LICENSE
 
-### urfave/cli (MIT License)
+### spf13/cobra (Apache License 2.0)
 
 - **Purpose**: CLI framework for building command-line applications
-- **Repository**: https://github.com/urfave/cli
-- **License**: MIT License
-- **License File**: urfave-cli.LICENSE
+- **Repository**: https://github.com/spf13/cobra
+- **License**: Apache License 2.0
+- **License File**: cobra.LICENSE
 
 ### JohannesKaufmann/html-to-markdown (MIT License)
 
@@ -27,12 +27,33 @@ This directory contains the licenses for third-party dependencies used in snag.
 - **License**: MIT License
 - **License File**: html-to-markdown.LICENSE
 
+### k3a/html2text (MIT License)
+
+- **Purpose**: HTML to plain text conversion
+- **Repository**: https://github.com/k3a/html2text
+- **License**: MIT License
+- **License File**: html2text.LICENSE
+
+### p3bot/agentdex (Mozilla Public License 2.0)
+
+- **Purpose**: Agent catalog and skills-directory path resolution
+- **Repository**: https://github.com/p3bot/agentdex
+- **License**: Mozilla Public License 2.0
+- **License File**: agentdex.LICENSE
+
+### go.yaml.in/yaml (MIT and Apache-2.0)
+
+- **Purpose**: YAML unmarshal of skill `SKILL.md` frontmatter
+- **Repository**: https://github.com/yaml/go-yaml
+- **License**: MIT (ported libyaml files) and Apache License 2.0 (remainder)
+- **License File**: go-yaml.LICENSE
+
 ## License Compatibility
 
-All dependencies use the MIT License, which is compatible with MPL 2.0:
+These licenses are compatible with snag's MPL 2.0:
 
-- MIT is a permissive license allowing commercial use, modification, and distribution
-- MIT-licensed code can be included in MPL 2.0 projects
+- MIT and Apache-2.0 are permissive and may be included in an MPL 2.0 project
+- agentdex is MPL 2.0, the same license as snag
 - Proper attribution is maintained in this directory
 
 ## Generating License Files
@@ -42,8 +63,11 @@ To verify or update these licenses:
 ```bash
 # Download license files from repositories
 curl -L https://raw.githubusercontent.com/go-rod/rod/main/LICENSE -o rod.LICENSE
-curl -L https://raw.githubusercontent.com/urfave/cli/main/LICENSE -o urfave-cli.LICENSE
+curl -L https://raw.githubusercontent.com/spf13/cobra/v1.10.2/LICENSE.txt -o cobra.LICENSE
 curl -L https://raw.githubusercontent.com/JohannesKaufmann/html-to-markdown/main/LICENSE -o html-to-markdown.LICENSE
+curl -L https://raw.githubusercontent.com/k3a/html2text/v1.4.0/LICENSE -o html2text.LICENSE
+curl -L https://raw.githubusercontent.com/p3bot/agentdex/v1.1.0/LICENSE -o agentdex.LICENSE
+curl -L https://raw.githubusercontent.com/yaml/go-yaml/v3.0.4/LICENSE -o go-yaml.LICENSE
 ```
 
 ## Acknowledgments

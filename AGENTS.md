@@ -16,15 +16,18 @@
 - Tab management: List, select, and fetch from existing browser tabs
 - Pattern matching: Select tabs by index, exact URL, substring, or regex
 - Output directory support: Auto-generate filenames with timestamps
-- Single binary distribution, no runtime dependencies
+- Single binary distribution, no extra runtime binaries or config files
+- Embedded agent skill (`snag --skill`) with user-initiated install via agentdex (catalog may use the network on first resolve; fail-closed; `snag --skill` never does)
 
 **Technology Stack:**
 
 - Language: Go 1.25.3
-- CLI Framework: github.com/spf13/cobra v1.10.1
+- CLI Framework: github.com/spf13/cobra v1.10.2
 - Browser Control: github.com/go-rod/rod v0.116.2 (Chrome DevTools Protocol)
-- HTML to Markdown: github.com/JohannesKaufmann/html-to-markdown/v2 v2.4.0
-- HTML to Text: github.com/k3a/html2text v1.2.1
+- HTML to Markdown: github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2
+- HTML to Text: github.com/k3a/html2text v1.4.0
+- Agent skills: github.com/p3bot/agentdex v1.1.0 (path authority for `--skill-install` / `--skill-list` / `--skill-uninstall`)
+- YAML: go.yaml.in/yaml/v3 v3.0.4 (skill frontmatter `name`)
 
 ## Setup Commands
 
@@ -45,6 +48,7 @@ go build -o snag ./cmd/snag
 # Run snag
 ./snag --version
 ./snag --help
+./snag --skill
 ```
 
 ## Build and Test Commands
@@ -211,7 +215,7 @@ Types: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`
 
 **Test Suite:**
 
-- **170 test functions** across 10 test files
+- **230 test functions** across 14 test files
 - Unit tests live beside each `internal/` package
 - Integration tests (browser-dependent) live in `internal/cli/cli_test.go`
 
@@ -271,6 +275,7 @@ go test -v -cover ./...              # With coverage
 - `internal/validate` - URL and input validation
 - `internal/logger` - Four-level stderr logger
 - `internal/doctor` - `--doctor` diagnostics
+- `internal/skill` - embedded `SKILL.md`, agentdex install/list/uninstall
 - `testdata/` - Shared HTML and URL fixtures at the module root
 
 **Key Tab Code Locations:**
@@ -375,10 +380,13 @@ snag -t 2 --wait-for ".loaded"         # Wait for selector
 
 **Direct Dependencies:**
 
-- `github.com/spf13/cobra` v1.10.1 - CLI framework
+- `github.com/spf13/cobra` v1.10.2 - CLI framework
+- `github.com/spf13/pflag` v1.0.10 - flag parsing (cobra)
 - `github.com/go-rod/rod` v0.116.2 - Chrome DevTools Protocol
-- `github.com/JohannesKaufmann/html-to-markdown/v2` v2.4.0 - HTML to Markdown conversion
-- `github.com/k3a/html2text` v1.2.1 - HTML to plain text conversion
+- `github.com/JohannesKaufmann/html-to-markdown/v2` v2.5.2 - HTML to Markdown conversion
+- `github.com/k3a/html2text` v1.4.0 - HTML to plain text conversion
+- `github.com/p3bot/agentdex` v1.1.0 - agent catalog and skills-directory paths
+- `go.yaml.in/yaml/v3` v3.0.4 - YAML unmarshal of skill frontmatter
 
 **Runtime Requirements:**
 
@@ -408,6 +416,13 @@ snag --debug <url>     # CDP message logs
 
 ```bash
 snag --doctor          # Comprehensive environment diagnostics
+
+# Agent skill (flags, not a subcommand)
+snag --skill                              # Print embedded SKILL.md
+snag --skill-install                      # Install for the default agent set
+snag --skill-install=grok                 # Named agent (Native-else-Shared)
+snag --skill-list
+snag --skill-uninstall [--local]
 ```
 
 Include this output when reporting issues.

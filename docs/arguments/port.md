@@ -61,6 +61,7 @@ snag --port 9223 https://example.com
 | `--port 9223` + browser on 9222 | No cross-detection       | 9222 browser not detected, try 9223       |
 | `--port` + `--force-headless`   | Launch headless on port  | Works normally                            |
 | `--port` + `--kill-browser`     | Kill browser on port     | Works normally                            |
+| `--port` + skill verb           | **Flag ignored**         | Skill modes do not connect to a browser   |
 | `--port` + `--doctor`           | Check custom port status | Works normally                            |
 | `--port` + `--open-browser`     | Open browser on port     | Works normally                            |
 | `--port` + `--list-tabs`        | `--list-tabs` overrides  | `--list-tabs` overrides all other options |

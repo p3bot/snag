@@ -101,6 +101,7 @@ snag https://example.com -d ""
 | `-d ./dir` + `--list-tabs`                      | `--list-tabs` overrides   | `--list-tabs` overrides all other options                                                                                 |
 | `-d ./dir` + `--doctor`                         | **Flag ignored**          | Doctor overrides, diagnostics only                                                                                        |
 | `-d ./dir` + `--kill-browser`                   | **Flag ignored**          | No content to save                                                                                                        |
+| `-d ./dir` + skill verb                         | **Flag ignored**          | Skill modes do not fetch                                                                                                  |
 | `-d ./dir` + `--open-browser` (no URL/url-file) | **Warning**, flag ignored | `"Warning: --output-dir ignored with --open-browser (no content fetching)"`                                               |
 | `-d ./dir` + `--open-browser` + `<url>`         | **Warning**, flag ignored | `"Warning: --output-dir ignored with --open-browser (no content fetching)"` - Opens browser, navigates to URL, exits snag |
 

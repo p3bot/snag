@@ -87,6 +87,7 @@ snag --url-file urls.txt --timeout 60
 | `--timeout` + `--doctor`                | **Flag ignored**          | Doctor overrides, diagnostics only                                       |
 | `--timeout` + `--open-browser` (no URL) | **Warning**, flag ignored | `"Warning: --timeout ignored with --open-browser (no content fetching)"` |
 | `--timeout` + `--kill-browser`          | **Flag ignored**          | No navigation performed                                                  |
+| `--timeout` + skill verb                | **Flag ignored**          | Skill modes do not fetch                                                 |
 
 **Timing-Related Interactions:**
 

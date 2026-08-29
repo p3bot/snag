@@ -45,6 +45,7 @@
 | `--close-tab` + `--open-browser` (no URL) | **Warning**               | `"Warning: --close-tab ignored with --open-browser (no content fetching)"`, browser stays open                           |
 | `--close-tab` + `--open-browser` + URL    | **Warning**, flag ignored | `"Warning: --close-tab ignored with --open-browser (no content fetching)"` - Opens browser, navigates to URL, exits snag |
 | `--close-tab` + `--kill-browser`          | **Flag ignored**          | No tabs to close                                                                                                         |
+| `--close-tab` + skill verb                | **Flag ignored**          | Skill modes do not fetch                                                                                                 |
 
 **Browser Mode Interactions:**
 

@@ -90,27 +90,32 @@ var (
 )
 
 var (
-	urlFile     string
-	flagOutput  string
-	outputDir   string
-	flagFormat  string
-	timeout     int
-	waitFor     string
-	port        int
-	closeTab    bool
-	forceHead   bool
-	openBrowser bool
-	listTabs    bool
-	tab         string
-	allTabs     bool
-	killBrowser bool
-	runDoctor   bool
-	showVersion bool
-	info        bool
-	verbose     bool
-	debug       bool
-	userAgent   string
-	userDataDir string
+	urlFile        string
+	flagOutput     string
+	outputDir      string
+	flagFormat     string
+	timeout        int
+	waitFor        string
+	port           int
+	closeTab       bool
+	forceHead      bool
+	openBrowser    bool
+	listTabs       bool
+	tab            string
+	allTabs        bool
+	killBrowser    bool
+	runDoctor      bool
+	showVersion    bool
+	info           bool
+	verbose        bool
+	debug          bool
+	userAgent      string
+	userDataDir    string
+	skillPrint     bool
+	skillInstall   []string
+	skillList      bool
+	skillUninstall []string
+	skillLocal     bool
 )
 
 var helpTemplate = fmt.Sprintf(`USAGE:
@@ -191,6 +196,12 @@ OPTIONS:
       --doctor                 Display comprehensive diagnostic information
   -k, --kill-browser           Kill browser processes with remote debugging enabled
 
+      --skill                  Print the embedded agent skill contract
+      --skill-install[=id]     Install the snag skill (repeat --skill-install=id for named agents)
+      --skill-list             List installed snag skill copies
+      --skill-uninstall[=id]   Remove installed snag skill copies
+      --local                  Use project-local skills directories (with skill install/list/uninstall)
+
       --debug                  Enable debug output
       --verbose                Enable verbose logging output (connection, fetch, and batch progress)
 
@@ -231,7 +242,16 @@ func init() {
 	rootCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging output (connection, fetch, and batch progress)")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug output")
 
+	rootCmd.Flags().BoolVar(&skillPrint, "skill", false, "Print the embedded agent skill contract")
+	rootCmd.Flags().StringArrayVar(&skillInstall, "skill-install", nil, "Install the snag skill (optional =id, repeatable)")
+	rootCmd.Flags().Lookup("skill-install").NoOptDefVal = skillBareSentinel
+	rootCmd.Flags().BoolVar(&skillList, "skill-list", false, "List installed snag skill copies")
+	rootCmd.Flags().StringArrayVar(&skillUninstall, "skill-uninstall", nil, "Remove installed snag skill copies (optional =id, repeatable)")
+	rootCmd.Flags().Lookup("skill-uninstall").NoOptDefVal = skillBareSentinel
+	rootCmd.Flags().BoolVar(&skillLocal, "local", false, "Use project-local skills directories (with skill install/list/uninstall)")
+
 	rootCmd.MarkFlagsMutuallyExclusive("verbose", "debug")
+	rootCmd.MarkFlagsMutuallyExclusive("skill", "skill-install", "skill-list", "skill-uninstall")
 
 	rootCmd.SetHelpTemplate(helpTemplate)
 }
@@ -331,6 +351,24 @@ func runCobra(cmd *cobra.Command, args []string) error {
 
 	logger.SetDefault(logger.New(level))
 
+	skillActive := skillFlagsChanged(cmd)
+
+	if showVersion {
+		fmt.Printf("snag version %s\n", Version)
+		fmt.Println("Repository: https://github.com/p3bot/snag")
+		fmt.Println("Report issues: https://github.com/p3bot/snag/issues/new")
+		return nil
+	}
+
+	if skillActive {
+		return handleSkill(cmd, args)
+	}
+
+	if skillLocal {
+		logger.Error("Cannot use --local without --skill-install, --skill-list, or --skill-uninstall")
+		return fmt.Errorf("conflicting flags: --local requires a skill install, list, or uninstall flag")
+	}
+
 	var urls []string
 
 	outputFile := strings.TrimSpace(flagOutput)
@@ -354,13 +392,6 @@ func runCobra(cmd *cobra.Command, args []string) error {
 
 	if runDoctor {
 		return handleDoctor(cmd)
-	}
-
-	if showVersion {
-		fmt.Printf("snag version %s\n", Version)
-		fmt.Println("Repository: https://github.com/p3bot/snag")
-		fmt.Println("Report issues: https://github.com/p3bot/snag/issues/new")
-		return nil
 	}
 
 	if killBrowser {

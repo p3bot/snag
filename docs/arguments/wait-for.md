@@ -61,6 +61,7 @@
 | `--wait-for` + `--list-tabs`  | `--list-tabs` overrides | `--list-tabs` overrides all other options                                       |
 | `--wait-for` + `--doctor`     | **Flag ignored**        | Doctor overrides, diagnostics only                                              |
 | `--wait-for` + `--kill-browser` | **Flag ignored**        | No content to fetch                                                             |
+| `--wait-for` + skill verb       | **Flag ignored**        | Skill modes do not fetch                                                        |
 
 **Use case for tabs + wait-for:**
 

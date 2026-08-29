@@ -54,6 +54,7 @@
 
 - With `--force-headless`: **Error** - `"Cannot use both --force-headless and --open-browser (conflicting modes)"`
 - With `--kill-browser`: **Error** - `"Cannot use --kill-browser with --open-browser (conflicting operations)"`
+- With a skill verb: **Error** - `"Cannot use a skill flag with --open-browser (conflicting operations)"`
 
 #### Interaction Matrix
 
@@ -69,6 +70,7 @@
 | `--open-browser` + `--all-tabs`     | **Warning**                                          | `"Warning: --all-tabs ignored with --open-browser (no content fetching)"` - Opens browser and exits |
 | `--open-browser` + `--list-tabs`    | `--list-tabs` overrides                              | `--list-tabs` overrides all other options                                                           |
 | `--open-browser` + `--doctor`       | **Flag ignored**                                     | Doctor overrides, diagnostics only                                                                  |
+| `--open-browser` + skill verb       | **Error**                                            | `"Cannot use a skill flag with --open-browser (conflicting operations)"`                            |
 
 **Rationale:**
 

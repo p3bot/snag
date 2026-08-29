@@ -76,6 +76,13 @@ snag --doctor --verbose
 | `--help` + `--doctor`  | Display help, exit 0 | Help has highest priority    |
 | `--doctor` + `--version` | Display version, exit 0 | Version has higher priority |
 
+**Flags That ERROR With `--doctor` (Conflicting Operations):**
+
+| Combination | Behavior | Notes |
+| ----------- | -------- | ----- |
+| `--doctor` + `--skill` | Error (exit 1) | Neither doctor nor skill print |
+| `--doctor` + `--skill-install` / `--skill-list` / `--skill-uninstall` | Error (exit 1) | Neither doctor nor skill mode |
+
 **Flags That Work WITH `--doctor`:**
 
 | Combination               | Behavior       | Notes                                          |
@@ -111,9 +118,10 @@ snag --doctor --verbose
 
 1. `--help` detected → Display help (highest priority)
 2. `--version` detected → Display version
-3. `--doctor` detected → Display diagnostics
-4. Ignore all other flags (except `--port` and logging flags which enhance diagnostics)
-5. Exit with code 0
+3. Skill flag + `--doctor` → usage-class error (neither runs)
+4. `--doctor` detected → Display diagnostics
+5. Ignore all other flags (except `--port` and logging flags which enhance diagnostics)
+6. Exit with code 0
 
 **Rationale:**
 

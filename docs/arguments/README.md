@@ -4,7 +4,7 @@
 
 **Status:** All arguments analyzed and documented ✅ | All inconsistencies resolved ✅
 
-**Last Updated:** 2025-10-26
+**Last Updated:** 2026-08-29
 
 ---
 
@@ -32,6 +32,7 @@
 - [**`--all-tabs`** / **`-a`** - Process all open tabs](./all-tabs.md)
 - [**`--user-agent STRING`** - Custom user agent](./user-agent.md)
 - [**`--user-data-dir DIRECTORY`** - Custom browser profile](./user-data-dir.md)
+- [**`--skill` / `--skill-install` / `--skill-list` / `--skill-uninstall` / `--local`** - Agent skill print and install](./skill.md)
 
 ### Advanced Topics
 
@@ -94,6 +95,16 @@
 | -------------- | ------- | ------ | ------- | ------------------------ |
 | `--user-agent` | -       | String | -       | Custom user agent string |
 
+### Agent Skill Flags
+
+| Flag                | Aliases | Type            | Default | Description |
+| ------------------- | ------- | --------------- | ------- | ----------- |
+| `--skill`           | -       | Bool            | `false` | Print the embedded agent skill contract |
+| `--skill-install`   | -       | Optional string | -       | Install the snag skill (`=id` repeatable; no value = default agent set) |
+| `--skill-list`      | -       | Bool            | `false` | List installed snag skill copies |
+| `--skill-uninstall` | -       | Optional string | -       | Remove installed snag skill copies (`=id` repeatable) |
+| `--local`           | -       | Bool            | `false` | Project-local skills roots (install/list/uninstall only) |
+
 ---
 
 ## Quick Reference Matrix
@@ -115,6 +126,10 @@ These determine the primary operation mode:
 | `--open-browser` + `<url>` | Open browser, navigate, NO fetch   |
 | `<url> <url> <url>`        | Batch fetch multiple URLs          |
 | `--url-file urls.txt`      | Fetch URLs from file               |
+| `--skill`                  | Print embedded skill, exit         |
+| `--skill-install[=id]`     | Install skill via agentdex         |
+| `--skill-list`             | List installed skill copies        |
+| `--skill-uninstall[=id]`   | Remove installed skill copies      |
 
 ### Output Destination (Mutually Exclusive)
 
@@ -161,22 +176,27 @@ These determine the primary operation mode:
 4. Fetch all tabs: `--all-tabs`
 5. List tabs: `--list-tabs`
 6. Open browser only: `--open-browser` (no URL)
+7. Skill print/install/list/uninstall: `--skill`, `--skill-install`, `--skill-list`, `--skill-uninstall`
 
 **Conflict Matrix:**
 
-|                             | URL     | Multi-URL | --tab   | --all-tabs | --list-tabs | --open-browser (no URL) |
-| --------------------------- | ------- | --------- | ------- | ---------- | ----------- | ----------------------- |
-| **URL**                     | ✅      | N/A       | ❌      | ❌         | ❌          | N/A                     |
-| **Multi-URL**               | N/A     | ✅        | ❌      | ❌         | ❌          | N/A                     |
-| **--tab**                   | ❌      | ❌        | ✅      | ❌         | ❌          | N/A                     |
-| **--all-tabs**              | ❌      | ❌        | ❌      | ✅         | ❌          | N/A                     |
-| **--list-tabs**             | Ignores | Ignores   | Ignores | Ignores    | ✅          | Ignores                 |
-| **--open-browser (no URL)** | N/A     | N/A       | N/A     | N/A        | N/A         | ✅                      |
+|                             | URL     | Multi-URL | --tab   | --all-tabs | --list-tabs | --open-browser (no URL) | --skill |
+| --------------------------- | ------- | --------- | ------- | ---------- | ----------- | ----------------------- | ------- |
+| **URL**                     | ✅      | N/A       | ❌      | ❌         | ❌          | N/A                     | ❌      |
+| **Multi-URL**               | N/A     | ✅        | ❌      | ❌         | ❌          | N/A                     | ❌      |
+| **--tab**                   | ❌      | ❌        | ✅      | ❌         | ❌          | N/A                     | ❌      |
+| **--all-tabs**              | ❌      | ❌        | ❌      | ✅         | ❌          | N/A                     | ❌      |
+| **--list-tabs**             | Ignores | Ignores   | Ignores | Ignores    | ✅          | Ignores                 | ❌      |
+| **--open-browser (no URL)** | N/A     | N/A       | N/A     | N/A        | N/A         | ✅                      | ❌      |
+| **--skill**                 | ❌      | ❌        | ❌      | ❌         | ❌          | ❌                      | ✅      |
+
+`--skill` here means any skill verb (`--skill`, `--skill-install`, `--skill-list`, `--skill-uninstall`). Skill verbs are mutually exclusive with each other.
 
 **Error Messages:**
 
 - `--tab` + URL: `"Cannot use both --tab and URL arguments (mutually exclusive content sources)"`
 - `--all-tabs` + URL: `"Cannot use both --all-tabs and URL arguments (mutually exclusive content sources)"`
+- Skill verb + URL / `--url-file` / `--doctor` / `--kill-browser` / `--list-tabs` / `--open-browser` / `--info` / `--tab` / `--all-tabs`: usage-class error (neither mode runs)
 
 ### Group 2: Output Destination
 
@@ -345,6 +365,24 @@ See [open-browser.md](./open-browser.md) for complete details.
 
 - Most flags are irrelevant (no fetching)
 
+### Mode 7: Agent Skill
+
+**Invocation:** `snag --skill` / `--skill-install[=id]` / `--skill-list` / `--skill-uninstall[=id]` (`--local` with install/list/uninstall only)
+
+See [skill.md](./skill.md) for complete details.
+
+**Compatible Flags:**
+
+- ✅ `--verbose` / `--debug`
+- ✅ `--local` with install, list, or uninstall
+- ✅ Repeat `--skill-install=id` / `--skill-uninstall=id`
+
+**Incompatible Flags:**
+
+- ❌ URL positional, `--url-file`, `--doctor`, `--kill-browser`, `--list-tabs`, `--open-browser`, `--info`, `--tab`, `--all-tabs`
+- ❌ `--local` with `--skill` (print)
+- ⚠️ Fetch modifiers (`--format`, `-o`, `-d`, `--timeout`, `--wait-for`, `--port`, and similar) ignored
+
 ---
 
 ## Output Routing Rules
@@ -363,6 +401,10 @@ See [open-browser.md](./open-browser.md) for complete details.
 | `--tab`, `-o file.md`         | `file.md`                              | Specified file              |
 | `--all-tabs`                  | `-d` or `./{auto-generated}.md` (each) | Always files                |
 | `--list-tabs`                 | stdout (tab list only)                 | Informational output        |
+| `--skill`                     | stdout (embedded skill body)           | No agentdex                 |
+| `--skill-install`             | stdout (written `…/snag/SKILL.md` paths, sorted) | One path per line    |
+| `--skill-list`                | stdout TSV `path\tagents`; empty inventory: empty stdout, `not installed` on stderr | Exit 0 when empty |
+| `--skill-uninstall`           | stdout TSV `removed\|absent\|kept\tdir[\treason-or-blockers]` | Paths sorted |
 
 ### Filename Generation Format
 

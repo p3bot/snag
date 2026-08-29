@@ -52,10 +52,11 @@
 
 1. `--help` (highest priority, overrides everything)
 2. `--version` (overrides everything below)
-3. `--doctor` (overrides everything below)
-4. `--kill-browser` (overrides everything below)
-5. `--list-tabs` (overrides everything below)
-6. All other flags (ignored or error when `--kill-browser` is present)
+3. Skill flag + `--kill-browser` → usage-class error (neither runs)
+4. `--doctor` (overrides everything below)
+5. `--kill-browser` (overrides everything below)
+6. `--list-tabs` (overrides everything below)
+7. All other flags (ignored or error when `--kill-browser` is present)
 
 #### Interaction Matrix
 
@@ -85,6 +86,7 @@ These flags represent conflicting operations and will produce an error:
 | `--kill-browser` + `--all-tabs`     | Error (conflicting operations) | Cannot use --kill-browser with --all-tabs     |
 | `--kill-browser` + `--tab`          | Error (conflicting operations) | Cannot use --kill-browser with --tab          |
 | `--kill-browser` + `--open-browser` | Error (conflicting operations) | Cannot use --kill-browser with --open-browser |
+| `--kill-browser` + skill verb       | Error (conflicting operations) | Cannot use a skill flag with --kill-browser (conflicting operations) |
 
 **Flags That Are SILENTLY IGNORED:**
 

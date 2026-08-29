@@ -83,6 +83,7 @@
 | --------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------- |
 | `--all-tabs` + `--force-headless` | **Error**                 | `"Cannot use --force-headless with --all-tabs (--all-tabs requires existing browser connection)"` |
 | `--all-tabs` + `--kill-browser`   | **Error**                 | `"Cannot use --kill-browser with --all-tabs (conflicting operations)"`                            |
+| `--all-tabs` + skill verb         | **Error**                 | `"Cannot use a skill flag with --all-tabs (conflicting operations)"`                              |
 | `--all-tabs` + `--open-browser`   | **Warning**, flag ignored | `"Warning: --all-tabs ignored with --open-browser (no content fetching)"`                         |
 
 **Output Control:**

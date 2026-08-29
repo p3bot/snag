@@ -18,7 +18,7 @@
 **Primary Purpose:**
 
 - List all open tabs in an existing browser connection
-- Acts like `--help` or `--version`: Overrides all other flags except those needed for its operation
+- Standalone mode: ignores fetch modifiers except `--port` and logging; conflicts with skill verbs
 - Lists tabs and exits snag immediately
 
 **Core Mode:**
@@ -32,7 +32,8 @@ snag --list-tabs --verbose
 - Connects to existing browser (or errors if none found)
 - Displays tab list to stdout
 - Exits snag immediately
-- Ignores all other flags except `--port` and logging flags
+- Ignores fetch modifiers except `--port` and logging flags
+- Skill verbs (`--skill`, `--skill-install`, `--skill-list`, `--skill-uninstall`) are a usage-class error (neither mode runs)
 
 **No Browser Connection:**
 
@@ -43,8 +44,9 @@ snag --list-tabs --verbose
 
 1. `--help` (highest priority, overrides everything)
 2. `--version` (overrides everything below)
-3. `--list-tabs` (overrides everything below)
-4. All other flags (ignored when `--list-tabs` is present)
+3. Skill verbs vs `--list-tabs` → usage-class error (neither runs)
+4. `--list-tabs` (overrides remaining fetch flags)
+5. All other flags (ignored when `--list-tabs` is present)
 
 #### Interaction Matrix
 
@@ -62,10 +64,11 @@ snag --list-tabs --verbose
 | -------------------------------- | ---------------------- | --------------------------------------------------------------------------- |
 | `--list-tabs` + `--doctor`       | `--doctor` overrides   | Doctor has higher priority                                                  |
 | `--list-tabs` + `--kill-browser` | **Error**              | `"Cannot use --kill-browser with --list-tabs (conflicting operations)"` |
+| `--list-tabs` + skill verb       | **Error**              | `"Cannot use a skill flag with --list-tabs (conflicting operations)"` |
 
 **All Other Flags Are SILENTLY IGNORED:**
 
-`--list-tabs` acts like `--help` and overrides all other arguments:
+`--list-tabs` ignores remaining fetch arguments (skill verbs error, see above):
 
 | Combination                        | Behavior                  | Notes                                |
 | ---------------------------------- | ------------------------- | ------------------------------------ |

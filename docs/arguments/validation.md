@@ -1,6 +1,6 @@
 # Validation Rules and Order
 
-**Last Updated:** 2025-10-26
+**Last Updated:** 2026-08-29
 
 This document describes the validation order and cross-cutting validation rules that apply to multiple arguments.
 
@@ -28,11 +28,15 @@ All string arguments are trimmed using `strings.TrimSpace()` after reading from 
   - **Integer flags**: `--timeout`, `--port`
   - **Boolean flags**: `--close-tab`, `--force-headless`, `--open-browser`, `--list-tabs`, `--all-tabs`
 
+**Repeatable (not last-wins):**
+
+- `--skill-install=id` and `--skill-uninstall=id` accumulate. Each occurrence is one agent id. A comma is part of that id, not a list separator.
+
 **Mutually Exclusive Flags:**
 
 - **Logging flags** (`--verbose`, `--debug`) are mutually exclusive
-- Using multiple logging flags together results in an error
-- Only one logging level flag can be used at a time
+- **Skill verbs** (`--skill`, `--skill-install`, `--skill-list`, `--skill-uninstall`) are mutually exclusive
+- Using multiple logging flags or multiple skill verbs together results in an error
 
 **Examples:**
 
@@ -40,6 +44,8 @@ All string arguments are trimmed using `strings.TrimSpace()` after reading from 
 snag -o file1.md -o file2.md https://example.com  # Uses file2.md (last flag wins)
 snag --port 9222 --port 9223 https://example.com  # Uses port 9223 (last flag wins)
 snag --verbose --debug https://example.com        # Error: mutually exclusive
+snag --skill-install=grok --skill-install=claude-code  # Both ids apply
+snag --skill --skill-list                         # Error: mutually exclusive skill verbs
 ```
 
 ### Priority Order for Special Flags
@@ -48,7 +54,8 @@ Certain flags override all others and exit immediately:
 
 1. `--help` (highest priority) → Display help, exit 0
 2. `--version` → Display version, exit 0
-3. `--list-tabs` → List tabs, exit 0, ignore all flags except `--port` and logging flags
+3. Skill flags (`--skill`, `--skill-install`, `--skill-list`, `--skill-uninstall`) → skill mode, or usage-class error if combined with other operation modes
+4. `--list-tabs` → List tabs, exit 0, ignore all flags except `--port` and logging flags
 
 ---
 
@@ -57,26 +64,29 @@ Certain flags override all others and exit immediately:
 **Current implementation order in `internal/cli/root.go` (`runCobra`):**
 
 1. Cobra validates logging flags are mutually exclusive (`--verbose`, `--debug`)
-2. Initialize logger with selected logging level
-3. Handle `--help` → exit early (handled by CLI framework)
-4. Handle `--version` → exit early (handled by CLI framework)
-5. Handle `--open-browser` without URL → exit early
-6. Handle `--list-tabs` → extract `--port` and logging flags, ignore all others, list tabs, exit early
-7. Handle `--all-tabs` → check for URL conflict, exit early
-8. Handle `--tab` → check for URL conflict, exit early
-9. Validate URL argument required (if not in special modes above)
-10. Validate URL format
-11. Validate `-o` + `-d` conflict
-12. Validate format
-13. Validate timeout
-14. Validate port
-15. Validate output path (if `-o`)
-16. Validate output directory (if `-d`)
-17. Execute fetch operation
+2. Cobra validates skill verbs are mutually exclusive (`--skill`, `--skill-install`, `--skill-list`, `--skill-uninstall`)
+3. Initialize logger with selected logging level
+4. Handle `--help` → exit early (handled by CLI framework)
+5. Handle `--version` → exit early (wins over doctor, skill, url-file, and all other flags)
+6. Handle skill flags → print/install/list/uninstall, or usage-class error with other operation modes / URL positionals
+7. Handle `--doctor` → exit early
+8. Handle `--open-browser` without URL → exit early
+9. Handle `--list-tabs` → extract `--port` and logging flags, ignore all others, list tabs, exit early
+10. Handle `--all-tabs` → check for URL conflict, exit early
+11. Handle `--tab` → check for URL conflict, exit early
+12. Validate URL argument required (if not in special modes above)
+13. Validate URL format
+14. Validate `-o` + `-d` conflict
+15. Validate format
+16. Validate timeout
+17. Validate port
+18. Validate output path (if `-o`)
+19. Validate output directory (if `-d`)
+20. Execute fetch operation
 
 **Key Patterns:**
 
-- Early exits for standalone modes (help, version, list-tabs, open-browser)
+- Early exits for standalone modes (help, version, skill, doctor, list-tabs, open-browser)
 - Content source validation before output validation
 - Mutually exclusive flag checks before individual flag validation
 - Path/filesystem validation happens last (just before operation)

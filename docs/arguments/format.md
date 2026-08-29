@@ -119,6 +119,7 @@ snag https://example.com --format html -o page.md
 | `--format` + `--list-tabs`             | `--list-tabs` overrides   | `--list-tabs` overrides all other options                               |
 | `--format` + `--open-browser` (no URL) | **Warning**, flag ignored | `"Warning: --format ignored with --open-browser (no content fetching)"` |
 | `--format` + `--kill-browser`          | **Flag ignored**          | No content to save                                                      |
+| `--format` + skill verb                | **Flag ignored**          | Skill modes do not fetch                                                |
 
 **Browser Mode Interactions:**
 

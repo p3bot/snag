@@ -651,7 +651,7 @@ snag --port 9223 https://example.com
 ### Core Arguments
 
 ```
-<url>                      URL to fetch (required, unless using --list-tabs or --tab)
+<url>                      URL to fetch (required unless using --list-tabs, --tab, --all-tabs, --open-browser, --kill-browser, --doctor, or a skill flag)
 -v, --version              Display version information
 -h, --help                 Show help message and exit
 ```
@@ -700,6 +700,26 @@ snag --port 9223 https://example.com
 --force-headless           Force headless mode even if Chromium is running
 -b, --open-browser         Open Chromium browser in visible state (no URL required)
 -k, --kill-browser         Kill browser processes with remote debugging enabled
+```
+
+### Agent skill
+
+Install is an explicit flag. There is no `snag skill` subcommand (`snag skill` would be treated as host `skill`). Agent ids are `--skill-install=id`, not leftover positionals.
+
+```
+--skill                    Print the embedded agent skill contract
+--skill-install[=id]       Install the snag skill (no value = default agent set; repeat =id)
+--skill-list               List installed snag skill copies
+--skill-uninstall[=id]     Remove installed snag skill copies
+--local                    Project-local skills directories (with install/list/uninstall)
+```
+
+```bash
+snag --skill
+snag --skill-install
+snag --skill-install=grok --skill-install=claude-code
+snag --skill-list
+snag --skill-uninstall
 ```
 
 ### Logging/Debugging
@@ -976,6 +996,9 @@ This project uses the following open-source libraries:
 - [go-rod/rod](https://github.com/go-rod/rod) - MIT License
 - [cobra](https://github.com/spf13/cobra) - Apache 2.0 License
 - [html-to-markdown](https://github.com/JohannesKaufmann/html-to-markdown) - MIT License
+- [html2text](https://github.com/k3a/html2text) - MIT License
+- [agentdex](https://github.com/p3bot/agentdex) - Mozilla Public License 2.0
+- [go-yaml](https://github.com/yaml/go-yaml) - MIT and Apache 2.0
 
 See the [LICENSES](LICENSES/) directory for full license texts.
 

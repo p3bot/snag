@@ -78,6 +78,7 @@
 | `--user-data-dir` + `--open-browser` (no URL) | Works normally | Open visible browser with custom profile                   |
 | `--user-data-dir` + `--open-browser` + URLs   | Works normally | Open visible browser with custom profile, navigate to URLs |
 | `--user-data-dir` + `--kill-browser`          | **Flag ignored** | No browser launch needed                                   |
+| `--user-data-dir` + skill verb                | **Flag ignored** | Skill modes do not launch a browser                        |
 
 **Connecting to existing browser:**
 

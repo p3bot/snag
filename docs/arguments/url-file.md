@@ -129,6 +129,7 @@ snag --url-file urls.txt https://example.com https://go.dev
 | `--url-file` + `--list-tabs`        | `--list-tabs` overrides | `--list-tabs` overrides all other options                                         |
 | `--url-file` + `--doctor`           | **Flag ignored**        | Doctor overrides, diagnostics only                                                |
 | `--url-file` + `--kill-browser`     | **Error**               | Conflicting operations                                                            |
+| `--url-file` + skill verb           | **Error**               | `"Cannot use a skill flag with --url-file (conflicting operations)"`              |
 
 **Output Control:**
 

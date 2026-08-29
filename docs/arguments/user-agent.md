@@ -88,6 +88,7 @@ Set a custom user agent string for browser requests. This flag allows you to cus
 | `--user-agent` + `--open-browser` + URL    | Works normally | UA applied at launch and when opening URLs in tabs                  |
 | `--user-agent` + `--user-data-dir`         | Works normally | UA for this session; profile for persistent data                    |
 | `--user-agent` + `--kill-browser`          | **Flag ignored** | No navigation performed                                           |
+| `--user-agent` + skill verb                | **Flag ignored** | Skill modes do not launch a browser                               |
 
 If a debug browser is already running, `--open-browser` attaches and warns that `--user-agent` is ignored (the running process already has its own user agent).
 

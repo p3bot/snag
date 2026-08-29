@@ -48,6 +48,7 @@
 | `--force-headless` + `--list-tabs`    | `--list-tabs` overrides  | `--list-tabs` overrides all other options                                                         |
 | `--force-headless` + `--doctor`       | **Flag ignored**         | Doctor overrides, diagnostics only                                                                |
 | `--force-headless` + `--kill-browser` | **Flag ignored**         | No browser launch needed                                                                          |
+| `--force-headless` + skill verb       | **Flag ignored**         | Skill modes do not launch a browser                                                               |
 
 **Rationale for Tab Errors:**
 

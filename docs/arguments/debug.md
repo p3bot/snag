@@ -57,6 +57,7 @@ snag https://example.com --debug
 
 - `--debug` + `--doctor` - Works normally (debug logs during diagnostic operations)
 - `--debug` + `--kill-browser` - Works normally (debug logs showing commands executed)
+- `--debug` + skill verb - Works normally (debug logging during skill modes)
 - `--debug` + `--user-data-dir` - Works normally (debug logs with custom profile)
 - `--debug` + `--user-agent` - Works normally (debug logs with custom UA)
 - `--debug` + all browser/output/timing flags - Works normally
