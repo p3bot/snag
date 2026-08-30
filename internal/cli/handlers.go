@@ -8,6 +8,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -28,25 +29,21 @@ import (
 	"github.com/p3bot/snag/internal/validate"
 )
 
-func snag(config *Config) error {
+func snag(ctx context.Context, config *Config) error {
 	bm := browser.NewBrowserManager(config.BrowserOptions())
-
-	browserMutex.Lock()
-	browserManager = bm
-	browserMutex.Unlock()
 
 	defer func() {
 		if config.CloseTab {
 			logger.Verbose("Cleanup: closing tab and browser if needed")
 		}
 		bm.Close()
-		browserMutex.Lock()
-		browserManager = nil
-		browserMutex.Unlock()
 	}()
 
-	err := bm.Connect()
+	err := bm.Connect(ctx)
 	if err != nil {
+		if e := abortErr(ctx, err); e != nil {
+			return e
+		}
 		if errors.Is(err, browser.ErrBrowserNotFound) {
 			logger.Error("No Chromium-based browser found")
 			logger.ErrorWithSuggestion(
@@ -59,6 +56,9 @@ func snag(config *Config) error {
 
 	page, err := bm.NewPage()
 	if err != nil {
+		if e := abortErr(ctx, err); e != nil {
+			return e
+		}
 		return err
 	}
 
@@ -68,18 +68,24 @@ func snag(config *Config) error {
 
 	fetcher := fetch.NewPageFetcher(page, config.Timeout)
 
-	_, err = fetcher.Fetch(fetch.FetchOptions{
+	_, err = fetcher.Fetch(ctx, fetch.FetchOptions{
 		URL:     config.URL,
 		Timeout: config.Timeout,
 		WaitFor: config.WaitFor,
 	})
 	if err != nil {
+		if e := abortErr(ctx, err); e != nil {
+			return e
+		}
 		return err
 	}
 
 	if config.OutputDir != "" {
 		info, err := page.Meta()
 		if err != nil {
+			if e := abortErr(ctx, err); e != nil {
+				return e
+			}
 			return fmt.Errorf("failed to get page info: %w", err)
 		}
 
@@ -97,6 +103,9 @@ func snag(config *Config) error {
 	if config.OutputFile == "" && (config.Format == format.PDF || config.Format == format.PNG) {
 		info, err := page.Meta()
 		if err != nil {
+			if e := abortErr(ctx, err); e != nil {
+				return e
+			}
 			return fmt.Errorf("failed to get page info: %w", err)
 		}
 
@@ -110,7 +119,13 @@ func snag(config *Config) error {
 		logger.Info("Filename: %s", config.OutputFile)
 	}
 
-	return format.ProcessContent(page, config.Format, config.OutputFile)
+	if err := format.ProcessContent(page, config.Format, config.OutputFile); err != nil {
+		if e := abortErr(ctx, err); e != nil {
+			return e
+		}
+		return err
+	}
+	return nil
 }
 
 func generateOutputFilename(title, url, format string,
@@ -125,19 +140,15 @@ func generateOutputFilename(title, url, format string,
 	return filepath.Join(outputDir, finalFilename), nil
 }
 
-func connectToExistingBrowser(port int) (*browser.BrowserManager, error) {
+func connectToExistingBrowser(ctx context.Context, port int) (*browser.BrowserManager, error) {
 	bm := browser.NewBrowserManager(browser.BrowserOptions{
 		Port: port,
 	})
 
-	browserMutex.Lock()
-	browserManager = bm
-	browserMutex.Unlock()
-
-	if err := bm.ConnectExisting(); err != nil {
-		browserMutex.Lock()
-		browserManager = nil
-		browserMutex.Unlock()
+	if err := bm.ConnectExisting(ctx); err != nil {
+		if e := abortErr(ctx, err); e != nil {
+			return nil, e
+		}
 		logger.Error("No browser found. Try running 'snag --open-browser' first")
 		return nil, browser.ErrNoBrowserRunning
 	}
@@ -206,18 +217,17 @@ func displayTabList(tabs []browser.TabInfo, w io.Writer, verbose bool) {
 }
 
 func handleListTabs(cmd *cobra.Command) error {
-	bm, err := connectToExistingBrowser(port)
+	ctx := cmd.Context()
+	bm, err := connectToExistingBrowser(ctx, port)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		browserMutex.Lock()
-		browserManager = nil
-		browserMutex.Unlock()
-	}()
 
 	tabs, err := bm.ListTabs()
 	if err != nil {
+		if e := abortErr(ctx, err); e != nil {
+			return e
+		}
 		return err
 	}
 
@@ -255,18 +265,17 @@ func handleAllTabs(cmd *cobra.Command) error {
 		return err
 	}
 
-	bm, err := connectToExistingBrowser(port)
+	ctx := cmd.Context()
+	bm, err := connectToExistingBrowser(ctx, port)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		browserMutex.Lock()
-		browserManager = nil
-		browserMutex.Unlock()
-	}()
 
 	tabs, err := bm.ListTabs()
 	if err != nil {
+		if e := abortErr(ctx, err); e != nil {
+			return e
+		}
 		return err
 	}
 
@@ -283,6 +292,9 @@ func handleAllTabs(cmd *cobra.Command) error {
 	failureCount := 0
 
 	for _, tab := range tabs {
+		if e := abortErr(ctx, nil); e != nil {
+			return e
+		}
 		if validate.IsNonFetchableURL(tab.URL) {
 			logger.Warning("[%d/%d] Skipping tab: %s (not fetchable)", tab.Index, len(tabs), tab.URL)
 			continue
@@ -292,14 +304,20 @@ func handleAllTabs(cmd *cobra.Command) error {
 
 		page, err := bm.GetTabByIndex(tab.Index)
 		if err != nil {
+			if e := abortErr(ctx, err); e != nil {
+				return e
+			}
 			logger.Error("[%d/%d] Failed to get tab: %v", tab.Index, len(tabs), err)
 			failureCount++
 			continue
 		}
 
 		if waitFor != "" {
-			err := fetch.WaitForSelector(page, waitFor, time.Duration(timeout)*time.Second)
+			err := fetch.WaitForSelector(ctx, page, waitFor, time.Duration(timeout)*time.Second)
 			if err != nil {
+				if e := abortErr(ctx, err); e != nil {
+					return e
+				}
 				logger.Error("[%d/%d] Wait failed: %v", tab.Index, len(tabs), err)
 				failureCount++
 				continue
@@ -317,6 +335,9 @@ func handleAllTabs(cmd *cobra.Command) error {
 		}
 
 		if err := format.ProcessContent(page, outputFormat, outputPath); err != nil {
+			if e := abortErr(ctx, err); e != nil {
+				return e
+			}
 			logger.Error("[%d/%d] Failed to process content: %v", tab.Index, len(tabs), err)
 			failureCount++
 			if closeTab {
@@ -385,15 +406,11 @@ func handleTabFetch(cmd *cobra.Command) error {
 		validate.CheckExtensionMismatch(outputFile, outputFormat)
 	}
 
-	bm, err := connectToExistingBrowser(port)
+	ctx := cmd.Context()
+	bm, err := connectToExistingBrowser(ctx, port)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		browserMutex.Lock()
-		browserManager = nil
-		browserMutex.Unlock()
-	}()
 
 	// Check for tab range pattern (e.g., "1-5")
 	if strings.Contains(tabValue, "-") {
@@ -408,7 +425,7 @@ func handleTabFetch(cmd *cobra.Command) error {
 					return ErrOutputFlagConflict
 				}
 
-				return handleTabRange(cmd, bm, start, end)
+				return handleTabRange(cmd, ctx, bm, start, end)
 			}
 		}
 	}
@@ -422,6 +439,9 @@ func handleTabFetch(cmd *cobra.Command) error {
 		logger.Verbose("Fetching from tab index: %d", tabIndex)
 		page, err = bm.GetTabByIndex(tabIndex)
 		if err != nil {
+			if e := abortErr(ctx, err); e != nil {
+				return e
+			}
 			if errors.Is(err, browser.ErrTabIndexInvalid) {
 				logger.Error("Tab index out of range")
 				logger.Info("Run 'snag --list-tabs' to see available tabs")
@@ -434,6 +454,9 @@ func handleTabFetch(cmd *cobra.Command) error {
 		logger.Verbose("Fetching from tab matching pattern: %s", tabValue)
 		matchedPages, err = bm.GetTabsByPattern(tabValue)
 		if err != nil {
+			if e := abortErr(ctx, err); e != nil {
+				return e
+			}
 			if errors.Is(err, browser.ErrNoTabMatch) {
 				logger.Error("No tab matches pattern '%s'", tabValue)
 				logger.Info("Run 'snag --list-tabs' to see available tabs")
@@ -456,20 +479,26 @@ func handleTabFetch(cmd *cobra.Command) error {
 	}
 
 	if multipleMatches {
-		return handleTabPatternBatch(cmd, matchedPages, tabValue)
+		return handleTabPatternBatch(cmd, ctx, bm, matchedPages, tabValue)
 	}
 
 	// Single tab fetch (validation already done earlier)
 	info, err := page.Meta()
 	if err != nil {
+		if e := abortErr(ctx, err); e != nil {
+			return e
+		}
 		return fmt.Errorf("failed to get page info: %w", err)
 	}
 
 	logger.Verbose("Fetching content from: %s", info.URL)
 
 	if validatedWaitFor != "" {
-		err := fetch.WaitForSelector(page, validatedWaitFor, time.Duration(timeout)*time.Second)
+		err := fetch.WaitForSelector(ctx, page, validatedWaitFor, time.Duration(timeout)*time.Second)
 		if err != nil {
+			if e := abortErr(ctx, err); e != nil {
+				return e
+			}
 			return err
 		}
 	}
@@ -487,22 +516,22 @@ func handleTabFetch(cmd *cobra.Command) error {
 	}
 
 	err = format.ProcessContent(page, outputFormat, outputFile)
+	if e := abortErr(ctx, err); e != nil {
+		return e
+	}
 	if closeTab {
-		closeExistingTab(page)
+		closeExistingTab(bm, page)
 	}
 	return err
 }
 
 // closeExistingTab closes a tab in an attached browser. Close failures are
 // warnings: content was already fetched. Chrome exits if this was the last tab.
-func closeExistingTab(page *browser.Page) {
+func closeExistingTab(bm *browser.BrowserManager, page *browser.Page) {
 	if page == nil {
 		return
 	}
 
-	browserMutex.Lock()
-	bm := browserManager
-	browserMutex.Unlock()
 	if bm != nil {
 		tabs, err := bm.ListTabs()
 		if err == nil && len(tabs) == 1 {
@@ -515,18 +544,24 @@ func closeExistingTab(page *browser.Page) {
 	}
 }
 
-func processBatchTabs(pages []*browser.Page, config *Config) error {
+func processBatchTabs(ctx context.Context, bm *browser.BrowserManager, pages []*browser.Page, config *Config) error {
 	timestamp := time.Now()
 
 	successCount := 0
 	failureCount := 0
 
 	for i, page := range pages {
+		if e := abortErr(ctx, nil); e != nil {
+			return e
+		}
 		current := i + 1
 		total := len(pages)
 
 		info, err := page.Meta()
 		if err != nil {
+			if e := abortErr(ctx, err); e != nil {
+				return e
+			}
 			logger.Error("[%d/%d] Failed to get tab info: %v", current, total, err)
 			failureCount++
 			continue
@@ -535,8 +570,11 @@ func processBatchTabs(pages []*browser.Page, config *Config) error {
 		logger.Verbose("[%d/%d] Processing: %s", current, total, info.URL)
 
 		if config.WaitFor != "" {
-			err := fetch.WaitForSelector(page, config.WaitFor, time.Duration(config.Timeout)*time.Second)
+			err := fetch.WaitForSelector(ctx, page, config.WaitFor, time.Duration(config.Timeout)*time.Second)
 			if err != nil {
+				if e := abortErr(ctx, err); e != nil {
+					return e
+				}
 				logger.Error("[%d/%d] Wait failed: %v", current, total, err)
 				failureCount++
 				continue
@@ -554,10 +592,13 @@ func processBatchTabs(pages []*browser.Page, config *Config) error {
 		}
 
 		if err := format.ProcessContent(page, config.Format, outputPath); err != nil {
+			if e := abortErr(ctx, err); e != nil {
+				return e
+			}
 			logger.Error("[%d/%d] Failed to process content: %v", current, total, err)
 			failureCount++
 			if config.CloseTab {
-				closeExistingTab(page)
+				closeExistingTab(bm, page)
 			}
 			continue
 		}
@@ -565,7 +606,7 @@ func processBatchTabs(pages []*browser.Page, config *Config) error {
 		successCount++
 
 		if config.CloseTab {
-			closeExistingTab(page)
+			closeExistingTab(bm, page)
 		}
 	}
 
@@ -578,7 +619,7 @@ func processBatchTabs(pages []*browser.Page, config *Config) error {
 	return nil
 }
 
-func handleTabRange(cmd *cobra.Command, bm *browser.BrowserManager, start, end int) error {
+func handleTabRange(cmd *cobra.Command, ctx context.Context, bm *browser.BrowserManager, start, end int) error {
 	outputFormat := validate.NormalizeFormat(flagFormat)
 	validatedWaitFor := validate.WaitFor(waitFor, cmd.Flags().Changed("wait-for"))
 	outDir := strings.TrimSpace(outputDir)
@@ -600,6 +641,9 @@ func handleTabRange(cmd *cobra.Command, bm *browser.BrowserManager, start, end i
 
 	pages, err := bm.GetTabsByRange(start, end)
 	if err != nil {
+		if e := abortErr(ctx, err); e != nil {
+			return e
+		}
 		logger.Error("Failed to get tab range: %v", err)
 		logger.Info("Run 'snag --list-tabs' to see available tabs")
 		return err
@@ -615,10 +659,10 @@ func handleTabRange(cmd *cobra.Command, bm *browser.BrowserManager, start, end i
 		CloseTab:  closeTab,
 	}
 
-	return processBatchTabs(pages, config)
+	return processBatchTabs(ctx, bm, pages, config)
 }
 
-func handleTabPatternBatch(cmd *cobra.Command, pages []*browser.Page, pattern string) error {
+func handleTabPatternBatch(cmd *cobra.Command, ctx context.Context, bm *browser.BrowserManager, pages []*browser.Page, pattern string) error {
 	outputFormat := validate.NormalizeFormat(flagFormat)
 	validatedWaitFor := validate.WaitFor(waitFor, cmd.Flags().Changed("wait-for"))
 	outDir := strings.TrimSpace(outputDir)
@@ -648,7 +692,7 @@ func handleTabPatternBatch(cmd *cobra.Command, pages []*browser.Page, pattern st
 		CloseTab:  closeTab,
 	}
 
-	return processBatchTabs(pages, config)
+	return processBatchTabs(ctx, bm, pages, config)
 }
 
 func handleOpenURLsInBrowser(cmd *cobra.Command, urls []string) error {
@@ -697,32 +741,36 @@ func handleOpenURLsInBrowser(cmd *cobra.Command, urls []string) error {
 
 	bm := browser.NewBrowserManager(opts)
 
-	browserMutex.Lock()
-	browserManager = bm
-	browserMutex.Unlock()
-	defer func() {
-		browserMutex.Lock()
-		browserManager = nil
-		browserMutex.Unlock()
-	}()
-
-	err = bm.Connect()
+	ctx := cmd.Context()
+	err = bm.Connect(ctx)
 	if err != nil {
+		if e := abortErr(ctx, err); e != nil {
+			return e
+		}
 		return err
 	}
 
 	for i, validatedURL := range validatedURLs {
+		if e := abortErr(ctx, nil); e != nil {
+			return e
+		}
 		current := i + 1
 		logger.Verbose("[%d/%d] Opening: %s", current, len(validatedURLs), validatedURL)
 
 		page, err := bm.NewPage()
 		if err != nil {
+			if e := abortErr(ctx, err); e != nil {
+				return e
+			}
 			logger.Error("[%d/%d] Failed to create page: %v", current, len(validatedURLs), err)
 			continue
 		}
 
 		err = page.NavigateTimeout(validatedURL, time.Duration(timeout)*time.Second)
 		if err != nil {
+			if e := abortErr(ctx, err); e != nil {
+				return e
+			}
 			logger.Error("[%d/%d] Failed to navigate: %v", current, len(validatedURLs), err)
 			continue
 		}
@@ -792,18 +840,14 @@ func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
 	logger.Verbose("Processing %d URL%s...", len(validatedURLs), plural(len(validatedURLs)))
 
 	bm := browser.NewBrowserManager(opts)
-	browserMutex.Lock()
-	browserManager = bm
-	browserMutex.Unlock()
-	defer func() {
-		bm.Close()
-		browserMutex.Lock()
-		browserManager = nil
-		browserMutex.Unlock()
-	}()
+	defer bm.Close()
 
-	err = bm.Connect()
+	ctx := cmd.Context()
+	err = bm.Connect(ctx)
 	if err != nil {
+		if e := abortErr(ctx, err); e != nil {
+			return e
+		}
 		return err
 	}
 
@@ -819,6 +863,9 @@ func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
 	failureCount := 0
 
 	for i, validatedURL := range validatedURLs {
+		if e := abortErr(ctx, nil); e != nil {
+			return e
+		}
 		current := i + 1
 		total := len(validatedURLs)
 
@@ -826,18 +873,24 @@ func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
 
 		page, err := bm.NewPage()
 		if err != nil {
+			if e := abortErr(ctx, err); e != nil {
+				return e
+			}
 			logger.Error("[%d/%d] Failed to create page: %v", current, total, err)
 			failureCount++
 			continue
 		}
 
 		fetcher := fetch.NewPageFetcher(page, timeout)
-		_, err = fetcher.Fetch(fetch.FetchOptions{
+		_, err = fetcher.Fetch(ctx, fetch.FetchOptions{
 			URL:     validatedURL,
 			Timeout: timeout,
 			WaitFor: validatedWaitFor,
 		})
 		if err != nil {
+			if e := abortErr(ctx, err); e != nil {
+				return e
+			}
 			logger.Error("[%d/%d] Failed to fetch: %v", current, total, err)
 			bm.ClosePage(page)
 			failureCount++
@@ -846,6 +899,9 @@ func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
 
 		info, err := page.Meta()
 		if err != nil {
+			if e := abortErr(ctx, err); e != nil {
+				return e
+			}
 			logger.Error("[%d/%d] Failed to get page info: %v", current, total, err)
 			bm.ClosePage(page)
 			failureCount++
@@ -864,6 +920,9 @@ func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
 		}
 
 		if err := format.ProcessContent(page, outputFormat, outputPath); err != nil {
+			if e := abortErr(ctx, err); e != nil {
+				return e
+			}
 			logger.Error("[%d/%d] Failed to save content: %v", current, total, err)
 			bm.ClosePage(page)
 			failureCount++
@@ -893,7 +952,32 @@ func plural(n int) string {
 	return "s"
 }
 
-func loadURLsFromReader(reader io.Reader, source string) ([]string, error) {
+func loadURLsFromReader(ctx context.Context, reader io.Reader, source string) ([]string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	type result struct {
+		urls []string
+		err  error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		urls, err := scanURLLines(reader, source)
+		ch <- result{urls, err}
+	}()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case r := <-ch:
+		return r.urls, r.err
+	}
+}
+
+func scanURLLines(reader io.Reader, source string) ([]string, error) {
 	var urls []string
 	scanner := bufio.NewScanner(reader)
 	lineNum := 0
@@ -948,9 +1032,9 @@ func loadURLsFromReader(reader io.Reader, source string) ([]string, error) {
 	return urls, nil
 }
 
-func loadURLsFromFile(filename string) ([]string, error) {
+func loadURLsFromFile(ctx context.Context, filename string) ([]string, error) {
 	if filename == "-" {
-		return loadURLsFromReader(os.Stdin, "stdin")
+		return loadURLsFromReader(ctx, os.Stdin, "stdin")
 	}
 
 	file, err := os.Open(filename)
@@ -960,7 +1044,7 @@ func loadURLsFromFile(filename string) ([]string, error) {
 	}
 	defer file.Close()
 
-	return loadURLsFromReader(file, filename)
+	return loadURLsFromReader(ctx, file, filename)
 }
 
 func handleKillBrowser(cmd *cobra.Command) error {

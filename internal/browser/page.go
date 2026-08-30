@@ -7,6 +7,7 @@
 package browser
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"time"
@@ -55,7 +56,7 @@ func (p *Page) Close() error {
 	if p == nil || p.rodPage == nil {
 		return nil
 	}
-	return p.rodPage.Close()
+	return p.rodPage.Context(context.Background()).Close()
 }
 
 func (p *Page) NavigateTimeout(url string, timeout time.Duration) error {

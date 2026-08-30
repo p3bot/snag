@@ -28,6 +28,10 @@ import (
 var snagBin string
 
 func TestMain(m *testing.M) {
+	if os.Getenv("SNAG_SIGNAL_HELPER") == "1" {
+		os.Exit(m.Run())
+	}
+
 	tmp, err := os.MkdirTemp("", "snag-cli-test-")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "mkdir temp: %v\n", err)

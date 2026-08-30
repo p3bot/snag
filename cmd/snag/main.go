@@ -9,13 +9,19 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/p3bot/snag/internal/cli"
 )
 
 func main() {
-	if err := cli.Execute(); err != nil {
+	err := cli.Execute()
+	if code := cli.SignalExitCode(); code != 0 {
+		os.Exit(code)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(cli.ExitCodeError)
 	}
 }

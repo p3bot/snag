@@ -7,9 +7,12 @@
 package browser
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -130,10 +133,17 @@ func NewBrowserManager(opts BrowserOptions) *BrowserManager {
 	}
 }
 
-func (bm *BrowserManager) Connect() error {
+func (bm *BrowserManager) Connect(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if !bm.forceHeadless {
 		logger.Verbose("Checking for existing browser instance on port %d...", bm.port)
-		if browser, err := bm.connectToExisting(); err == nil {
+		browser, err := bm.connectToExisting(ctx)
+		if err == nil {
 			if bm.openBrowser {
 				logger.Verbose("Connected to existing browser (visible mode)")
 			} else {
@@ -149,6 +159,9 @@ func (bm *BrowserManager) Connect() error {
 			bm.wasLaunched = false
 			return nil
 		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		logger.Verbose("No existing browser instance found")
 	}
 
@@ -160,7 +173,7 @@ func (bm *BrowserManager) Connect() error {
 		logger.Verbose("Launching browser in visible mode...")
 	}
 
-	browser, err := bm.launchBrowser(headless)
+	browser, err := bm.launchBrowser(ctx, headless)
 	if err != nil {
 		return err
 	}
@@ -178,8 +191,11 @@ func (bm *BrowserManager) Connect() error {
 }
 
 // ConnectExisting attaches to a browser already listening on the debug port.
-func (bm *BrowserManager) ConnectExisting() error {
-	b, err := bm.connectToExisting()
+func (bm *BrowserManager) ConnectExisting(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	b, err := bm.connectToExisting(ctx)
 	if err != nil {
 		return err
 	}
@@ -187,17 +203,17 @@ func (bm *BrowserManager) ConnectExisting() error {
 	return nil
 }
 
-func (bm *BrowserManager) connectToExisting() (*rod.Browser, error) {
+func (bm *BrowserManager) connectToExisting(ctx context.Context) (*rod.Browser, error) {
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", bm.port)
 	logger.Debug("Attempting connection to: %s", baseURL)
 
-	wsURL, err := launcher.ResolveURL(baseURL)
+	wsURL, err := resolveWSURL(ctx, bm.port)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrBrowserConnection, err)
 	}
 	logger.Debug("Resolved WebSocket URL: %s", wsURL)
 
-	browser := rod.New().ControlURL(wsURL).Timeout(ConnectTimeout)
+	browser := rod.New().Context(ctx).ControlURL(wsURL).Timeout(ConnectTimeout)
 
 	if err := browser.Connect(); err != nil {
 		logger.Debug("Connection failed: %v", err)
@@ -208,13 +224,13 @@ func (bm *BrowserManager) connectToExisting() (*rod.Browser, error) {
 	return browser.CancelTimeout(), nil
 }
 
-func (bm *BrowserManager) launchBrowser(headless bool) (*rod.Browser, error) {
+func (bm *BrowserManager) launchBrowser(ctx context.Context, headless bool) (*rod.Browser, error) {
 	path, err := bm.findBrowserPath()
 	if err != nil {
 		return nil, err
 	}
 
-	l := launcher.New().
+	l := launcher.New().Context(ctx).
 		Bin(path).
 		Headless(headless).
 		Leakless(headless).
@@ -239,11 +255,22 @@ func (bm *BrowserManager) launchBrowser(headless bool) (*rod.Browser, error) {
 	logger.Debug("Browser launched with control URL: %s", controlURL)
 
 	bm.launcher = l
+	bm.wasLaunched = true
+	bm.launchedHeadless = headless
 
-	browser := rod.New().ControlURL(controlURL).Timeout(ConnectTimeout)
+	browser := rod.New().Context(ctx).ControlURL(controlURL).Timeout(ConnectTimeout)
 
 	if err := browser.Connect(); err != nil {
 		logger.Debug("Failed to connect to launched browser: %v", err)
+		// Close() does not kill a visible browser, so a failed start must
+		// tear down here (interrupt and CDP failure both land on this path).
+		l.Kill()
+		if bm.userDataDir == "" {
+			l.Cleanup()
+		}
+		bm.launcher = nil
+		bm.wasLaunched = false
+		bm.launchedHeadless = false
 		return nil, fmt.Errorf("%w: %w", ErrBrowserConnection, err)
 	}
 	logger.Debug("Successfully connected to launched browser")
@@ -251,9 +278,15 @@ func (bm *BrowserManager) launchBrowser(headless bool) (*rod.Browser, error) {
 	return browser.CancelTimeout(), nil
 }
 
-func (bm *BrowserManager) OpenBrowserOnly() error {
+func (bm *BrowserManager) OpenBrowserOnly(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	logger.Verbose("Checking for existing browser instance on port %d...", bm.port)
-	if _, err := bm.connectToExisting(); err == nil {
+	if _, err := bm.connectToExisting(ctx); err == nil {
 		logger.Success("Browser already running on port %d", bm.port)
 		if bm.userDataDir != "" {
 			logger.Warning("--user-data-dir ignored (browser already running with its own profile)")
@@ -264,13 +297,16 @@ func (bm *BrowserManager) OpenBrowserOnly() error {
 		logger.Info("You can connect to it using: snag <url>")
 		return nil
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	path, err := bm.findBrowserPath()
 	if err != nil {
 		return err
 	}
 
-	l := launcher.New().
+	l := launcher.New().Context(ctx).
 		Bin(path).
 		Leakless(false).
 		Headless(false).
@@ -292,14 +328,23 @@ func (bm *BrowserManager) OpenBrowserOnly() error {
 		return fmt.Errorf("failed to launch browser: %w", err)
 	}
 
-	browser := rod.New().ControlURL(controlURL).Timeout(ConnectTimeout)
+	abandon := func() {
+		l.Kill()
+		if bm.userDataDir == "" {
+			l.Cleanup()
+		}
+	}
+
+	browser := rod.New().Context(ctx).ControlURL(controlURL).Timeout(ConnectTimeout)
 	if err := browser.Connect(); err != nil {
+		abandon()
 		return fmt.Errorf("%w: %w", ErrBrowserConnection, err)
 	}
 
 	_, err = browser.Page(proto.TargetCreateTarget{URL: "about:blank"})
 	if err != nil {
-		browser.Close()
+		_ = browser.Context(context.Background()).Close()
+		abandon()
 		return fmt.Errorf("failed to create page: %w", err)
 	}
 
@@ -342,25 +387,27 @@ func (bm *BrowserManager) NewPage() (*Page, error) {
 }
 
 func (bm *BrowserManager) Close() {
-	if bm.browser == nil {
-		return
-	}
-
 	if bm.wasLaunched && bm.launchedHeadless {
 		logger.Verbose("Closing headless browser...")
-		if err := bm.browser.Close(); err != nil {
-			logger.Warning("Failed to close browser: %v", err)
+		if bm.browser != nil {
+			// Cleanup must not use the cancelled process context.
+			if err := bm.browser.Context(context.Background()).Close(); err != nil && !errors.Is(err, context.Canceled) {
+				logger.Warning("Failed to close browser: %v", err)
+			}
 		}
-
 		if bm.launcher != nil {
 			bm.launcher.Kill()
 			if bm.userDataDir == "" {
 				bm.launcher.Cleanup()
 			}
 		}
-	} else if bm.wasLaunched && !bm.launchedHeadless {
+		return
+	}
+	if bm.wasLaunched {
 		logger.Verbose("Leaving visible browser running")
-	} else {
+		return
+	}
+	if bm.browser != nil {
 		logger.Verbose("Leaving existing browser instance running")
 	}
 }
@@ -371,7 +418,7 @@ func (bm *BrowserManager) ClosePage(page *Page) {
 	}
 
 	logger.Verbose("Closing page...")
-	if err := page.Close(); err != nil {
+	if err := page.Close(); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Warning("Failed to close page: %v", err)
 	}
 }
@@ -390,6 +437,44 @@ func (bm *BrowserManager) Name() string {
 
 func (bm *BrowserManager) FindBrowserPath() (string, error) {
 	return bm.findBrowserPath()
+}
+
+// resolveWSURL reads webSocketDebuggerUrl from /json/version so connect can
+// honour ctx. The advertised host is rewritten to 127.0.0.1 on the given port
+// (Chrome may report [::1] or 0.0.0.0).
+func resolveWSURL(ctx context.Context, port int) (string, error) {
+	endpoint := fmt.Sprintf("http://127.0.0.1:%d/json/version", port)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return "", err
+	}
+	client := &http.Client{Timeout: ConnectTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GET %s: %s", endpoint, resp.Status)
+	}
+
+	var payload struct {
+		WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return "", err
+	}
+	if payload.WebSocketDebuggerURL == "" {
+		return "", fmt.Errorf("no webSocketDebuggerUrl from %s", endpoint)
+	}
+
+	u, err := url.Parse(payload.WebSocketDebuggerURL)
+	if err != nil {
+		return "", err
+	}
+	u.Host = fmt.Sprintf("127.0.0.1:%d", port)
+	return u.String(), nil
 }
 
 // ProbePort reports how many page tabs are open on a debugging port.
@@ -431,13 +516,30 @@ type pageWithInfo struct {
 	id    string
 }
 
+func browserCtxErr(b *rod.Browser) error {
+	if b == nil {
+		return nil
+	}
+	ctx := b.GetContext()
+	if ctx == nil {
+		return nil
+	}
+	return ctx.Err()
+}
+
 func (bm *BrowserManager) getSortedPagesWithInfo() ([]pageWithInfo, error) {
 	if bm.browser == nil {
 		return nil, ErrNoBrowserRunning
 	}
+	if err := browserCtxErr(bm.browser); err != nil {
+		return nil, err
+	}
 
 	pages, err := bm.browser.Pages()
 	if err != nil {
+		if e := browserCtxErr(bm.browser); e != nil {
+			return nil, e
+		}
 		return nil, fmt.Errorf("failed to get pages: %w", err)
 	}
 
@@ -445,6 +547,9 @@ func (bm *BrowserManager) getSortedPagesWithInfo() ([]pageWithInfo, error) {
 	for i, page := range pages {
 		info, err := page.Info()
 		if err != nil {
+			if e := browserCtxErr(bm.browser); e != nil {
+				return nil, e
+			}
 			logger.Warning("Failed to get info for tab at position %d (will be excluded from list): %v", i+1, err)
 			logger.Debug("Tab page object: %+v", page)
 			continue

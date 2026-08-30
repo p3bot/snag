@@ -9,7 +9,6 @@ package cli
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/spf13/cobra"
 
@@ -83,11 +82,6 @@ func browserOptionsFromFlags(cmd *cobra.Command, openBrowser, forceHeadless bool
 	}
 	return cfg.BrowserOptions(), nil
 }
-
-var (
-	browserManager *browser.BrowserManager
-	browserMutex   sync.Mutex
-)
 
 var (
 	urlFile        string
@@ -210,11 +204,12 @@ OPTIONS:
 `, DefaultTimeout)
 
 var rootCmd = &cobra.Command{
-	Use:          "snag [options] URL...",
-	Short:        "Intelligently fetch web page content using a browser engine",
-	Args:         cobra.ArbitraryArgs,
-	RunE:         runCobra,
-	SilenceUsage: true,
+	Use:           "snag [options] URL...",
+	Short:         "Intelligently fetch web page content using a browser engine",
+	Args:          cobra.ArbitraryArgs,
+	RunE:          runCobra,
+	SilenceUsage:  true,
+	SilenceErrors: true,
 }
 
 func init() {
@@ -376,7 +371,7 @@ func runCobra(cmd *cobra.Command, args []string) error {
 
 	// Load URLs from file if specified
 	if urlFile != "" {
-		fileURLs, err := loadURLsFromFile(strings.TrimSpace(urlFile))
+		fileURLs, err := loadURLsFromFile(cmd.Context(), strings.TrimSpace(urlFile))
 		if err != nil {
 			return err
 		}
@@ -481,7 +476,7 @@ func runCobra(cmd *cobra.Command, args []string) error {
 
 		logger.Verbose("Opening browser...")
 		bm := browser.NewBrowserManager(opts)
-		return bm.OpenBrowserOnly()
+		return bm.OpenBrowserOnly(cmd.Context())
 	}
 
 	if len(urls) == 0 {
@@ -566,7 +561,7 @@ func runCobra(cmd *cobra.Command, args []string) error {
 
 		logger.Verbose("Configuration: format=%s, timeout=%ds, port=%d", config.Format, config.Timeout, config.Port)
 
-		return snag(config)
+		return snag(cmd.Context(), config)
 	}
 
 	return handleMultipleURLs(cmd, urls)

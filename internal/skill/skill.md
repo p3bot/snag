@@ -60,8 +60,8 @@ snag --doctor                # environment diagnostics
 
 - 0 success
 - 1 any error
-- 130 SIGINT
-- 143 SIGTERM
+- 130 SIGINT (user interrupt, not retryable)
+- 143 SIGTERM (user interrupt, not retryable)
 
 ## Skill flags
 

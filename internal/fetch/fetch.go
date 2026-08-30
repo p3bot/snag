@@ -38,9 +38,25 @@ func NewPageFetcher(page *browser.Page, timeout int) *PageFetcher {
 	}
 }
 
-func (pf *PageFetcher) Fetch(opts FetchOptions) (string, error) {
+func fetchCanceled(ctx context.Context, err error) error {
+	if ctx != nil && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if errors.Is(err, context.Canceled) {
+		return err
+	}
+	return nil
+}
+
+func (pf *PageFetcher) Fetch(ctx context.Context, opts FetchOptions) (string, error) {
 	if pf.page == nil {
 		return "", fmt.Errorf("cannot fetch: page is nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
 	}
 
 	logger.Verbose("Fetching %s...", opts.URL)
@@ -49,6 +65,9 @@ func (pf *PageFetcher) Fetch(opts FetchOptions) (string, error) {
 
 	err := pf.page.NavigateTimeout(opts.URL, pf.timeout)
 	if err != nil {
+		if e := fetchCanceled(ctx, err); e != nil {
+			return "", e
+		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			logger.Error("Page load timeout exceeded (%ds)", opts.Timeout)
 			logger.ErrorWithSuggestion(
@@ -63,12 +82,18 @@ func (pf *PageFetcher) Fetch(opts FetchOptions) (string, error) {
 	logger.Verbose("Waiting for page to stabilize...")
 	err = pf.page.WaitStable(browser.StabilizeTimeout)
 	if err != nil {
+		if e := fetchCanceled(ctx, err); e != nil {
+			return "", e
+		}
 		logger.Warning("Page did not stabilize: %v", err)
 	}
 
 	if opts.WaitFor != "" {
-		err := WaitForSelector(pf.page, opts.WaitFor, pf.timeout)
+		err := WaitForSelector(ctx, pf.page, opts.WaitFor, pf.timeout)
 		if err != nil {
+			if e := fetchCanceled(ctx, err); e != nil {
+				return "", e
+			}
 			if errors.Is(err, context.DeadlineExceeded) {
 				logger.ErrorWithSuggestion(
 					fmt.Sprintf("Selector not found within %ds", opts.Timeout),
@@ -86,6 +111,9 @@ func (pf *PageFetcher) Fetch(opts FetchOptions) (string, error) {
 	logger.Verbose("Extracting HTML content...")
 	html, err := pf.page.HTML()
 	if err != nil {
+		if e := fetchCanceled(ctx, err); e != nil {
+			return "", e
+		}
 		return "", fmt.Errorf("failed to extract HTML: %w", err)
 	}
 
@@ -155,15 +183,24 @@ func (pf *PageFetcher) getURL() string {
 	return meta.URL
 }
 
-func WaitForSelector(page *browser.Page, selector string, timeout time.Duration) error {
+func WaitForSelector(ctx context.Context, page *browser.Page, selector string, timeout time.Duration) error {
 	if page == nil {
 		return fmt.Errorf("cannot wait for selector: page is nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	logger.Verbose("Waiting for selector: %s", selector)
 
 	elem, err := page.Element(selector, timeout)
 	if err != nil {
+		if e := fetchCanceled(ctx, err); e != nil {
+			return e
+		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			logger.Error("Timeout waiting for selector: %s", selector)
 			return fmt.Errorf("timeout waiting for selector %s: %w", selector, err)
@@ -173,6 +210,9 @@ func WaitForSelector(page *browser.Page, selector string, timeout time.Duration)
 
 	err = elem.WaitVisible()
 	if err != nil {
+		if e := fetchCanceled(ctx, err); e != nil {
+			return e
+		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			logger.Error("Timeout waiting for selector to be visible: %s", selector)
 			return fmt.Errorf("timeout waiting for selector %s to be visible: %w", selector, err)

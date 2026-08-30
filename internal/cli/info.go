@@ -76,25 +76,22 @@ func handleInfoFromURL(cmd *cobra.Command, urlStr string) error {
 	validatedWaitFor := validate.WaitFor(waitFor, cmd.Flags().Changed("wait-for"))
 
 	bm := browser.NewBrowserManager(opts)
+	ctx := cmd.Context()
+	defer bm.Close()
 
-	browserMutex.Lock()
-	browserManager = bm
-	browserMutex.Unlock()
-
-	defer func() {
-		bm.Close()
-		browserMutex.Lock()
-		browserManager = nil
-		browserMutex.Unlock()
-	}()
-
-	err = bm.Connect()
+	err = bm.Connect(ctx)
 	if err != nil {
+		if e := abortErr(ctx, err); e != nil {
+			return e
+		}
 		return err
 	}
 
 	page, err := bm.NewPage()
 	if err != nil {
+		if e := abortErr(ctx, err); e != nil {
+			return e
+		}
 		return err
 	}
 
@@ -103,17 +100,23 @@ func handleInfoFromURL(cmd *cobra.Command, urlStr string) error {
 	}
 
 	fetcher := fetch.NewPageFetcher(page, timeout)
-	_, err = fetcher.Fetch(fetch.FetchOptions{
+	_, err = fetcher.Fetch(ctx, fetch.FetchOptions{
 		URL:     validatedURL,
 		Timeout: timeout,
 		WaitFor: validatedWaitFor,
 	})
 	if err != nil {
+		if e := abortErr(ctx, err); e != nil {
+			return e
+		}
 		return err
 	}
 
 	pageInfo, err := fetch.ExtractPageInfo(page)
 	if err != nil {
+		if e := abortErr(ctx, err); e != nil {
+			return e
+		}
 		return err
 	}
 
@@ -141,15 +144,11 @@ func handleInfoFromTab(cmd *cobra.Command) error {
 		}
 	}
 
-	bm, err := connectToExistingBrowser(port)
+	ctx := cmd.Context()
+	bm, err := connectToExistingBrowser(ctx, port)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		browserMutex.Lock()
-		browserManager = nil
-		browserMutex.Unlock()
-	}()
 
 	var page *browser.Page
 
@@ -157,6 +156,9 @@ func handleInfoFromTab(cmd *cobra.Command) error {
 		logger.Verbose("Getting info from tab index: %d", tabIndex)
 		page, err = bm.GetTabByIndex(tabIndex)
 		if err != nil {
+			if e := abortErr(ctx, err); e != nil {
+				return e
+			}
 			if errors.Is(err, browser.ErrTabIndexInvalid) {
 				logger.Error("Tab index out of range")
 				logger.Info("Run 'snag --list-tabs' to see available tabs")
@@ -167,6 +169,9 @@ func handleInfoFromTab(cmd *cobra.Command) error {
 		logger.Verbose("Getting info from tab matching pattern: %s", tabValue)
 		matchedPages, err := bm.GetTabsByPattern(tabValue)
 		if err != nil {
+			if e := abortErr(ctx, err); e != nil {
+				return e
+			}
 			if errors.Is(err, browser.ErrNoTabMatch) {
 				logger.Error("No tab matches pattern '%s'", tabValue)
 				logger.Info("Run 'snag --list-tabs' to see available tabs")
@@ -186,8 +191,11 @@ func handleInfoFromTab(cmd *cobra.Command) error {
 	if cmd.Flags().Changed("wait-for") {
 		validatedWaitFor := validate.WaitFor(waitFor, true)
 		if validatedWaitFor != "" {
-			err := fetch.WaitForSelector(page, validatedWaitFor, time.Duration(timeout)*time.Second)
+			err := fetch.WaitForSelector(ctx, page, validatedWaitFor, time.Duration(timeout)*time.Second)
 			if err != nil {
+				if e := abortErr(ctx, err); e != nil {
+					return e
+				}
 				return err
 			}
 		}
@@ -195,6 +203,9 @@ func handleInfoFromTab(cmd *cobra.Command) error {
 
 	pageInfo, err := fetch.ExtractPageInfo(page)
 	if err != nil {
+		if e := abortErr(ctx, err); e != nil {
+			return e
+		}
 		return err
 	}
 

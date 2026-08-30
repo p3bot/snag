@@ -7,12 +7,16 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/p3bot/snag/internal/browser"
 	"github.com/p3bot/snag/internal/fetch"
@@ -546,7 +550,7 @@ docs.company.com/api  // API docs
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			reader := strings.NewReader(tt.input)
-			urls, err := loadURLsFromReader(reader, tt.source)
+			urls, err := loadURLsFromReader(context.Background(), reader, tt.source)
 
 			if tt.expectError {
 				if err == nil {
@@ -574,8 +578,41 @@ docs.company.com/api  // API docs
 	}
 }
 
+func TestLoadURLsFromReader_Canceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := loadURLsFromReader(ctx, strings.NewReader("https://example.com\n"), "stdin")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("already-cancelled ctx: %v", err)
+	}
+
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+	r, w := io.Pipe()
+	t.Cleanup(func() {
+		_ = w.Close()
+		_ = r.Close()
+	})
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := loadURLsFromReader(ctx, r, "stdin")
+		done <- err
+	}()
+
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("blocked read cancelled ctx: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("loadURLsFromReader did not return after cancel")
+	}
+}
+
 func TestCloseExistingTab_Nil(t *testing.T) {
-	closeExistingTab(nil)
+	closeExistingTab(nil, nil)
 }
 
 func TestOutputPageInfo_SetsSlug(t *testing.T) {

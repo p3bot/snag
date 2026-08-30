@@ -7,10 +7,15 @@
 package browser
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"testing"
+
+	"github.com/go-rod/rod"
 
 	"github.com/p3bot/snag/internal/logger"
 )
@@ -250,6 +255,121 @@ func TestProbePort_CountsPageTargets(t *testing.T) {
 	}
 	if n != 2 {
 		t.Errorf("ProbePort = %d, want 2 page targets", n)
+	}
+}
+
+func TestResolveWSURL_RewritesHost(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	port := ln.Addr().(*net.TCPAddr).Port
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json/version", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"webSocketDebuggerUrl":"ws://0.0.0.0:%d/devtools/browser/abc"}`, port)
+	})
+	go http.Serve(ln, mux)
+
+	got, err := resolveWSURL(context.Background(), port)
+	if err != nil {
+		t.Fatalf("resolveWSURL: %v", err)
+	}
+	want := fmt.Sprintf("ws://127.0.0.1:%d/devtools/browser/abc", port)
+	if got != want {
+		t.Fatalf("resolveWSURL = %q, want %q", got, want)
+	}
+}
+
+func TestResolveWSURL_Canceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := resolveWSURL(ctx, 1)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled ctx: %v", err)
+	}
+}
+
+func TestResolveWSURL_BadStatus(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json/version", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "nope", http.StatusInternalServerError)
+	})
+	go http.Serve(ln, mux)
+
+	_, err = resolveWSURL(context.Background(), ln.Addr().(*net.TCPAddr).Port)
+	if err == nil {
+		t.Fatal("expected error for non-OK status")
+	}
+}
+
+func TestResolveWSURL_MissingURL(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json/version", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{}`))
+	})
+	go http.Serve(ln, mux)
+
+	_, err = resolveWSURL(context.Background(), ln.Addr().(*net.TCPAddr).Port)
+	if err == nil {
+		t.Fatal("expected error when webSocketDebuggerUrl is empty")
+	}
+}
+
+func TestClose_HeadlessNilBrowserNoPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Close panicked: %v", r)
+		}
+	}()
+	bm := NewBrowserManager(BrowserOptions{})
+	bm.wasLaunched = true
+	bm.launchedHeadless = true
+	bm.Close()
+}
+
+func TestListTabs_CanceledSession(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	bm := NewBrowserManager(BrowserOptions{})
+	bm.browser = rod.New().Context(ctx)
+
+	if _, err := bm.ListTabs(); !errors.Is(err, context.Canceled) {
+		t.Fatalf("ListTabs cancelled session: %v", err)
+	}
+	if _, err := bm.GetTabByIndex(1); !errors.Is(err, context.Canceled) {
+		t.Fatalf("GetTabByIndex cancelled session: %v", err)
+	}
+	if _, err := bm.GetTabsByPattern("example"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("GetTabsByPattern cancelled session: %v", err)
+	}
+}
+
+func TestConnectCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	bm := NewBrowserManager(BrowserOptions{Port: 1})
+	if err := bm.Connect(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Connect cancelled ctx: %v", err)
+	}
+	if err := bm.ConnectExisting(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("ConnectExisting cancelled ctx: %v", err)
+	}
+	if err := bm.OpenBrowserOnly(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("OpenBrowserOnly cancelled ctx: %v", err)
 	}
 }
 

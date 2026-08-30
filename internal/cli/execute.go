@@ -6,34 +6,16 @@
 
 package cli
 
-import (
-	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
-)
+import "github.com/p3bot/snag/internal/logger"
 
-// Execute runs the command tree. A signal closes the browser and exits
-// immediately with POSIX 128+signum.
+// Execute runs the command tree. SIGINT/SIGTERM cancel the root context;
+// main maps that to POSIX 128+signum via SignalExitCode.
 func Execute() error {
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		sig := <-sigChan
-		fmt.Fprintf(os.Stderr, "\nReceived %v, cleaning up...\n", sig)
-
-		browserMutex.Lock()
-		if browserManager != nil {
-			browserManager.Close()
-		}
-		browserMutex.Unlock()
-
-		if sig == os.Interrupt {
-			os.Exit(ExitCodeInterrupt)
-		}
-		os.Exit(ExitCodeSIGTERM)
-	}()
-
-	return rootCmd.Execute()
+	ctx, stop := signalContext()
+	defer stop()
+	err := rootCmd.ExecuteContext(ctx)
+	if SignalExitCode() != 0 {
+		logger.Verbose("cancelled")
+	}
+	return err
 }

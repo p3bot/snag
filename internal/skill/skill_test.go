@@ -50,6 +50,7 @@ func TestTextRequiredGuidance(t *testing.T) {
 		"No `--quiet`",
 		"130",
 		"143",
+		"not retryable",
 		"snag --skill",
 		"--skill-install",
 		"--skill-list",
