@@ -321,6 +321,242 @@ func TestCLI_InvalidURL(t *testing.T) {
 	}
 }
 
+func hasANSI(s string) bool {
+	return strings.Contains(s, "\x1b[")
+}
+
+func clearColorEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("FORCE_COLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "")
+}
+
+func TestCLI_ColorInvalidValue(t *testing.T) {
+	clearColorEnv(t)
+	stdout, stderr, err := runSnag("--color", "rainbow")
+
+	assertError(t, err)
+	assertExitCode(t, err, 1)
+	if stdout != "" && hasANSI(stdout) {
+		t.Errorf("stdout has ANSI: %q", stdout)
+	}
+	if !strings.Contains(stderr, "rainbow") {
+		t.Errorf("stderr missing bad value, got: %s", stderr)
+	}
+	for _, allowed := range []string{"auto", "always", "never"} {
+		if !strings.Contains(stderr, allowed) {
+			t.Errorf("stderr missing allowed value %q, got: %s", allowed, stderr)
+		}
+	}
+	if strings.Contains(stderr, "Code:") || strings.Contains(stderr, "Fix:") || strings.Contains(stderr, "ValidValues") {
+		t.Errorf("stderr has structured envelope: %s", stderr)
+	}
+}
+
+func TestCLI_ColorCaseAndWhitespace(t *testing.T) {
+	clearColorEnv(t)
+	t.Setenv("TERM", "dumb")
+
+	stdout, stderr, err := runSnag("--color", "AUTO")
+	assertError(t, err)
+	assertExitCode(t, err, 1)
+	if hasANSI(stdout) {
+		t.Errorf("stdout has ANSI: %q", stdout)
+	}
+	if hasANSI(stderr) {
+		t.Errorf("stderr has ANSI with --color=AUTO TERM=dumb: %q", stderr)
+	}
+
+	stdout, stderr, err = runSnag("--color", " Always ")
+	assertError(t, err)
+	assertExitCode(t, err, 1)
+	if hasANSI(stdout) {
+		t.Errorf("stdout has ANSI: %q", stdout)
+	}
+	if !hasANSI(stderr) {
+		t.Errorf("stderr missing ANSI with --color=' Always ': %q", stderr)
+	}
+}
+
+func TestCLI_ColorNeverNoANSI(t *testing.T) {
+	clearColorEnv(t)
+	t.Setenv("TERM", "xterm")
+	stdout, stderr, err := runSnag("--color", "never", "--verbose")
+	assertError(t, err)
+	assertExitCode(t, err, 1)
+	if hasANSI(stdout) {
+		t.Errorf("stdout has ANSI: %q", stdout)
+	}
+	if hasANSI(stderr) {
+		t.Errorf("stderr has ANSI with --color=never: %q", stderr)
+	}
+}
+
+func TestCLI_ColorAlwaysOverridesNOCOLOR(t *testing.T) {
+	clearColorEnv(t)
+	t.Setenv("NO_COLOR", "1")
+	t.Setenv("TERM", "xterm")
+	stdout, stderr, err := runSnag("--verbose", "--color", "always")
+	assertError(t, err)
+	assertExitCode(t, err, 1)
+	if hasANSI(stdout) {
+		t.Errorf("stdout has ANSI: %q", stdout)
+	}
+	if !hasANSI(stderr) {
+		t.Errorf("stderr missing ANSI with NO_COLOR=1 --color=always: %q", stderr)
+	}
+}
+
+func TestCLI_ColorAutoNOCOLOR(t *testing.T) {
+	clearColorEnv(t)
+	t.Setenv("NO_COLOR", "1")
+	t.Setenv("FORCE_COLOR", "1")
+	t.Setenv("TERM", "xterm")
+	stdout, stderr, err := runSnag("--verbose", "--color", "auto")
+	assertError(t, err)
+	assertExitCode(t, err, 1)
+	if hasANSI(stdout) {
+		t.Errorf("stdout has ANSI: %q", stdout)
+	}
+	if hasANSI(stderr) {
+		t.Errorf("stderr has ANSI with NO_COLOR=1 --color=auto: %q", stderr)
+	}
+}
+
+func TestCLI_ColorAlwaysColoursRedirectedStderr(t *testing.T) {
+	clearColorEnv(t)
+	t.Setenv("TERM", "dumb")
+	stdout, stderr, err := runSnag("--color", "always")
+	assertError(t, err)
+	assertExitCode(t, err, 1)
+	if hasANSI(stdout) {
+		t.Errorf("stdout has ANSI: %q", stdout)
+	}
+	if !hasANSI(stderr) {
+		t.Errorf("stderr missing ANSI with --color=always TERM=dumb, got: %q", stderr)
+	}
+}
+
+func TestCLI_ColorAutoForceColorTERMDumb(t *testing.T) {
+	clearColorEnv(t)
+	t.Setenv("TERM", "dumb")
+	t.Setenv("FORCE_COLOR", "1")
+	stdout, stderr, err := runSnag("--verbose", "--color", "auto")
+	assertError(t, err)
+	assertExitCode(t, err, 1)
+	if hasANSI(stdout) {
+		t.Errorf("stdout has ANSI: %q", stdout)
+	}
+	if !hasANSI(stderr) {
+		t.Errorf("stderr missing ANSI with TERM=dumb FORCE_COLOR=1 --color=auto, got: %q", stderr)
+	}
+}
+
+func TestCLI_ColorAutoTERMDumbNoForce(t *testing.T) {
+	clearColorEnv(t)
+	t.Setenv("TERM", "dumb")
+	stdout, stderr, err := runSnag("--verbose", "--color", "auto")
+	assertError(t, err)
+	assertExitCode(t, err, 1)
+	if hasANSI(stdout) {
+		t.Errorf("stdout has ANSI: %q", stdout)
+	}
+	if hasANSI(stderr) {
+		t.Errorf("stderr has ANSI with TERM=dumb --color=auto: %q", stderr)
+	}
+}
+
+func TestCLI_ColorAlwaysDoesNotColourStdout(t *testing.T) {
+	clearColorEnv(t)
+	t.Setenv("TERM", "dumb")
+	stdout, stderr, err := runSnag("--color", "always", "--version")
+	assertNoError(t, err)
+	if hasANSI(stdout) {
+		t.Errorf("--version stdout has ANSI with --color=always: %q", stdout)
+	}
+	if hasANSI(stderr) {
+		t.Errorf("--version stderr has ANSI: %q", stderr)
+	}
+
+	stdout, _, err = runSnag("--color", "always", "--skill")
+	assertNoError(t, err)
+	if hasANSI(stdout) {
+		t.Errorf("--skill stdout has ANSI with --color=always: %q", stdout)
+	}
+}
+
+func TestCLI_ColorAlwaysUnknownFlag(t *testing.T) {
+	clearColorEnv(t)
+	t.Setenv("TERM", "dumb")
+	stdout, stderr, err := runSnag("--color", "always", "--bogus")
+	assertError(t, err)
+	assertExitCode(t, err, 1)
+	if hasANSI(stdout) {
+		t.Errorf("stdout has ANSI: %q", stdout)
+	}
+	if !hasANSI(stderr) {
+		t.Errorf("stderr missing ANSI with --color=always --bogus: %q", stderr)
+	}
+	assertContains(t, stderr, "unknown flag")
+}
+
+func TestCLI_ColorNeverUnknownFlag(t *testing.T) {
+	clearColorEnv(t)
+	t.Setenv("TERM", "xterm")
+	stdout, stderr, err := runSnag("--color", "never", "--bogus")
+	assertError(t, err)
+	assertExitCode(t, err, 1)
+	if hasANSI(stdout) {
+		t.Errorf("stdout has ANSI: %q", stdout)
+	}
+	if hasANSI(stderr) {
+		t.Errorf("stderr has ANSI with --color=never --bogus: %q", stderr)
+	}
+	assertContains(t, stderr, "unknown flag")
+}
+
+func TestCLI_ColorAlwaysVerboseDebugConflict(t *testing.T) {
+	clearColorEnv(t)
+	t.Setenv("TERM", "dumb")
+	stdout, stderr, err := runSnag("--color", "always", "--verbose", "--debug")
+	assertError(t, err)
+	assertExitCode(t, err, 1)
+	if hasANSI(stdout) {
+		t.Errorf("stdout has ANSI: %q", stdout)
+	}
+	if !hasANSI(stderr) {
+		t.Errorf("stderr missing ANSI with --color=always --verbose --debug: %q", stderr)
+	}
+	assertContains(t, stderr, "verbose")
+	assertContains(t, stderr, "debug")
+}
+
+func TestCLI_ColorNeverVerboseDebugConflict(t *testing.T) {
+	clearColorEnv(t)
+	t.Setenv("TERM", "xterm")
+	stdout, stderr, err := runSnag("--color", "never", "--verbose", "--debug")
+	assertError(t, err)
+	assertExitCode(t, err, 1)
+	if hasANSI(stdout) {
+		t.Errorf("stdout has ANSI: %q", stdout)
+	}
+	if hasANSI(stderr) {
+		t.Errorf("stderr has ANSI with --color=never --verbose --debug: %q", stderr)
+	}
+	assertContains(t, stderr, "verbose")
+	assertContains(t, stderr, "debug")
+}
+
+func TestCLI_HelpDocumentsColor(t *testing.T) {
+	stdout, stderr, _ := runSnag("--help")
+	output := stdout + stderr
+	assertContains(t, output, "--color")
+	assertContains(t, output, "auto")
+	assertContains(t, output, "always")
+	assertContains(t, output, "never")
+}
+
 // TestCLI_InvalidFormat tests invalid format flag
 func TestCLI_InvalidFormat(t *testing.T) {
 	// Use a truly invalid format (json is not supported)

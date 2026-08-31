@@ -134,46 +134,137 @@ func TestLogger_StderrOnly(t *testing.T) {
 	}
 }
 
-func TestShouldUseColor(t *testing.T) {
-	// Note: This function checks environment variable and terminal status
-	// We can only reliably test the NO_COLOR environment variable behavior
+func TestUseColor(t *testing.T) {
+	tests := []struct {
+		name      string
+		mode      string
+		noColor   string
+		force     string
+		clicolor  string
+		term      string
+		stderrTTY bool
+		want      bool
+	}{
+		{name: "always overrides NO_COLOR and FORCE_COLOR", mode: ColorAlways, noColor: "1", force: "1", term: "xterm", stderrTTY: true, want: true},
+		{name: "empty NO_COLOR is unset", mode: ColorAuto, noColor: "", force: "1", term: "xterm", stderrTTY: false, want: true},
+		{name: "never", mode: ColorNever, term: "xterm", stderrTTY: true, want: false},
+		{name: "never ignores FORCE_COLOR", mode: ColorNever, force: "1", term: "xterm", stderrTTY: true, want: false},
+		{name: "never ignores NO_COLOR", mode: ColorNever, noColor: "1", term: "xterm", stderrTTY: true, want: false},
+		{name: "always overrides non-TTY", mode: ColorAlways, term: "xterm", stderrTTY: false, want: true},
+		{name: "always overrides TERM=dumb", mode: ColorAlways, term: "dumb", stderrTTY: false, want: true},
+		{name: "auto FORCE_COLOR colours non-TTY TERM=dumb", mode: ColorAuto, force: "1", term: "dumb", stderrTTY: false, want: true},
+		{name: "auto CLICOLOR_FORCE colours non-TTY TERM=dumb", mode: ColorAuto, clicolor: "1", term: "dumb", stderrTTY: false, want: true},
+		{name: "auto TERM=dumb without force", mode: ColorAuto, term: "dumb", stderrTTY: true, want: false},
+		{name: "auto TTY", mode: ColorAuto, term: "xterm", stderrTTY: true, want: true},
+		{name: "auto non-TTY", mode: ColorAuto, term: "xterm", stderrTTY: false, want: false},
+		{name: "FORCE_COLOR=0 is falsy", mode: ColorAuto, force: "0", term: "xterm", stderrTTY: false, want: false},
+		{name: "FORCE_COLOR=false is falsy", mode: ColorAuto, force: "false", term: "xterm", stderrTTY: false, want: false},
+		{name: "FORCE_COLOR=yes is truthy", mode: ColorAuto, force: "yes", term: "xterm", stderrTTY: false, want: true},
+		{name: "NO_COLOR wins over FORCE_COLOR in auto", mode: ColorAuto, noColor: "1", force: "1", term: "xterm", stderrTTY: true, want: false},
+	}
 
-	// Save original NO_COLOR value
-	originalNOCOLOR := os.Getenv("NO_COLOR")
-	defer func() {
-		if originalNOCOLOR != "" {
-			os.Setenv("NO_COLOR", originalNOCOLOR)
-		} else {
-			os.Unsetenv("NO_COLOR")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("NO_COLOR", tt.noColor)
+			t.Setenv("FORCE_COLOR", tt.force)
+			t.Setenv("CLICOLOR_FORCE", tt.clicolor)
+			t.Setenv("TERM", tt.term)
+			got := UseColor(tt.mode, tt.stderrTTY)
+			if got != tt.want {
+				t.Errorf("UseColor(%q, %v) = %v, want %v", tt.mode, tt.stderrTTY, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveColor(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("FORCE_COLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "")
+	t.Setenv("TERM", "dumb")
+
+	got, err := ResolveColor(ColorAlways)
+	if err != nil {
+		t.Fatalf("ResolveColor(always): %v", err)
+	}
+	if !got {
+		t.Fatal("ResolveColor(always) with TERM=dumb: want true")
+	}
+
+	got, err = ResolveColor("Always")
+	if err != nil {
+		t.Fatalf("ResolveColor(Always): %v", err)
+	}
+	if !got {
+		t.Fatal("ResolveColor(Always) with TERM=dumb: want true")
+	}
+
+	got, err = ResolveColor(" always ")
+	if err != nil {
+		t.Fatalf("ResolveColor(%q): %v", " always ", err)
+	}
+	if !got {
+		t.Fatal("ResolveColor(\" always \") with TERM=dumb: want true")
+	}
+
+	got, err = ResolveColor("NEVER")
+	if err != nil {
+		t.Fatalf("ResolveColor(NEVER): %v", err)
+	}
+	if got {
+		t.Fatal("ResolveColor(NEVER): want false")
+	}
+
+	got, err = ResolveColor("")
+	if err == nil {
+		t.Fatal("ResolveColor empty: want error")
+	}
+	if got {
+		t.Fatal("ResolveColor empty: want color false")
+	}
+
+	got, err = ResolveColor("  ")
+	if err == nil {
+		t.Fatal("ResolveColor whitespace: want error")
+	}
+	if got {
+		t.Fatal("ResolveColor whitespace: want color false")
+	}
+
+	got, err = ResolveColor("rainbow")
+	if err == nil {
+		t.Fatal("ResolveColor(rainbow): want error")
+	}
+	if got {
+		t.Fatal("ResolveColor(rainbow): want color false")
+	}
+	msg := err.Error()
+	for _, needle := range []string{"rainbow", "auto", "always", "never"} {
+		if !strings.Contains(msg, needle) {
+			t.Errorf("ResolveColor error %q missing %q", msg, needle)
 		}
-	}()
+	}
+	if strings.Contains(msg, "Code:") || strings.Contains(msg, "Fix:") || strings.Contains(msg, "ValidValues") {
+		t.Errorf("ResolveColor error has structured envelope: %q", msg)
+	}
+}
 
-	// Test with NO_COLOR set
-	t.Run("with NO_COLOR set", func(t *testing.T) {
-		os.Setenv("NO_COLOR", "1")
-		result := shouldUseColor()
-		if result != false {
-			t.Errorf("shouldUseColor() with NO_COLOR=1 should return false, got %v", result)
-		}
-	})
+func TestFormatErrorLine(t *testing.T) {
+	got := FormatErrorLine(io.EOF, false)
+	if strings.Contains(got, "\x1b[") {
+		t.Errorf("FormatErrorLine with color off has ANSI: %q", got)
+	}
+	if got != "Error: EOF" {
+		t.Errorf("FormatErrorLine = %q, want %q", got, "Error: EOF")
+	}
 
-	// Test with NO_COLOR unset (result depends on terminal status)
-	t.Run("with NO_COLOR unset", func(t *testing.T) {
-		os.Unsetenv("NO_COLOR")
-		result := shouldUseColor()
-		// Result can be true or false depending on whether stderr is a terminal
-		// Just verify it returns a boolean without panicking
-		_ = result
-	})
-
-	// Test with empty NO_COLOR (should behave as unset)
-	t.Run("with NO_COLOR empty", func(t *testing.T) {
-		os.Setenv("NO_COLOR", "")
-		result := shouldUseColor()
-		// Empty NO_COLOR should behave as unset
-		// Result depends on terminal status
-		_ = result
-	})
+	got = FormatErrorLine(io.EOF, true)
+	if !strings.Contains(got, "\x1b[") {
+		t.Errorf("FormatErrorLine with color on missing ANSI: %q", got)
+	}
+	if !strings.Contains(got, "Error:") || !strings.Contains(got, "EOF") {
+		t.Errorf("FormatErrorLine = %q, want Error: prefix and message", got)
+	}
 }
 
 func TestNewLogger(t *testing.T) {
@@ -209,8 +300,6 @@ func TestNewLogger(t *testing.T) {
 				t.Errorf("NewLogger created logger with writer %v, expected os.Stderr", logger.writer)
 			}
 
-			// Color setting depends on shouldUseColor() which depends on environment
-			// Just verify it's a boolean
 			_ = logger.color
 		})
 	}

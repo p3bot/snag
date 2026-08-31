@@ -8,6 +8,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -103,6 +104,7 @@ var (
 	info           bool
 	verbose        bool
 	debug          bool
+	colorMode      string
 	userAgent      string
 	userDataDir    string
 	skillPrint     bool
@@ -196,6 +198,7 @@ OPTIONS:
       --skill-uninstall[=id]   Remove installed snag skill copies
       --local                  Use project-local skills directories (with skill install/list/uninstall)
 
+      --color string           Colour stderr diagnostics: auto | always | never (default auto)
       --debug                  Enable debug output
       --verbose                Enable verbose logging output (connection, fetch, and batch progress)
 
@@ -236,6 +239,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&info, "info", "i", false, "Output page metadata as JSON (title, URL, domain, slug, timestamp)")
 	rootCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging output (connection, fetch, and batch progress)")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug output")
+	rootCmd.Flags().StringVar(&colorMode, "color", logger.ColorAuto, "Colour stderr diagnostics: auto | always | never")
 
 	rootCmd.Flags().BoolVar(&skillPrint, "skill", false, "Print the embedded agent skill contract")
 	rootCmd.Flags().StringArrayVar(&skillInstall, "skill-install", nil, "Install the snag skill (optional =id, repeatable)")
@@ -247,6 +251,15 @@ func init() {
 
 	rootCmd.MarkFlagsMutuallyExclusive("verbose", "debug")
 	rootCmd.MarkFlagsMutuallyExclusive("skill", "skill-install", "skill-list", "skill-uninstall")
+
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		useColor, err := logger.ResolveColor(colorMode)
+		if err != nil {
+			return err
+		}
+		logger.SetDefault(logger.NewWithWriter(logLevel(), os.Stderr, useColor))
+		return nil
+	}
 
 	rootCmd.SetHelpTemplate(helpTemplate)
 }
@@ -336,16 +349,17 @@ func validateFlagCombinations(cmd *cobra.Command, hasURLs bool, hasMultipleURLs 
 	return nil
 }
 
-func runCobra(cmd *cobra.Command, args []string) error {
-	level := logger.LevelNormal
+func logLevel() logger.LogLevel {
 	if debug {
-		level = logger.LevelDebug
-	} else if verbose {
-		level = logger.LevelVerbose
+		return logger.LevelDebug
 	}
+	if verbose {
+		return logger.LevelVerbose
+	}
+	return logger.LevelNormal
+}
 
-	logger.SetDefault(logger.New(level))
-
+func runCobra(cmd *cobra.Command, args []string) error {
 	skillActive := skillFlagsChanged(cmd)
 
 	if showVersion {

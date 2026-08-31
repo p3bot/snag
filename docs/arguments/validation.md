@@ -1,6 +1,6 @@
 # Validation Rules and Order
 
-**Last Updated:** 2026-08-29
+**Last Updated:** 2026-08-30
 
 This document describes the validation order and cross-cutting validation rules that apply to multiple arguments.
 
@@ -13,7 +13,7 @@ This document describes the validation order and cross-cutting validation rules 
 All string arguments are trimmed using `strings.TrimSpace()` after reading from CLI framework:
 
 - Removes leading and trailing whitespace (spaces, tabs, newlines)
-- Applied to: `--output`, `--output-dir`, `--format`, `--wait-for`, `--user-agent`, `--user-data-dir`, `--tab`, `--url-file`, and `<url>` positional arguments
+- Applied to: `--output`, `--output-dir`, `--format`, `--wait-for`, `--user-agent`, `--user-data-dir`, `--tab`, `--url-file`, `--color`, and `<url>` positional arguments
 - Empty strings after trimming are handled per-argument (usually warning + ignored or error)
 - Standard behavior in most CLI tools (git, docker, etc.)
 
@@ -24,7 +24,7 @@ All string arguments are trimmed using `strings.TrimSpace()` after reading from 
 - When the same flag is specified multiple times, the last value is used
 - No error, no warning - silent override
 - Applies to most flags:
-  - **String flags**: `--output`, `--output-dir`, `--format`, `--wait-for`, `--user-agent`, `--user-data-dir`, `--tab`, `--url-file`
+  - **String flags**: `--output`, `--output-dir`, `--format`, `--wait-for`, `--user-agent`, `--user-data-dir`, `--tab`, `--url-file`, `--color`
   - **Integer flags**: `--timeout`, `--port`
   - **Boolean flags**: `--close-tab`, `--force-headless`, `--open-browser`, `--list-tabs`, `--all-tabs`
 
@@ -61,28 +61,29 @@ Certain flags override all others and exit immediately:
 
 ## Validation Order
 
-**Current implementation order in `internal/cli/root.go` (`runCobra`):**
+**Current implementation order in `internal/cli/root.go` (Cobra execute, then `PersistentPreRunE`, then `runCobra`):**
 
-1. Cobra validates logging flags are mutually exclusive (`--verbose`, `--debug`)
-2. Cobra validates skill verbs are mutually exclusive (`--skill`, `--skill-install`, `--skill-list`, `--skill-uninstall`)
-3. Initialize logger with selected logging level
-4. Handle `--help` → exit early (handled by CLI framework)
-5. Handle `--version` → exit early (wins over doctor, skill, url-file, and all other flags)
-6. Handle skill flags → print/install/list/uninstall, or usage-class error with other operation modes / URL positionals
-7. Handle `--doctor` → exit early
-8. Handle `--open-browser` without URL → exit early
-9. Handle `--list-tabs` → extract `--port` and logging flags, ignore all others, list tabs, exit early
-10. Handle `--all-tabs` → check for URL conflict, exit early
-11. Handle `--tab` → check for URL conflict, exit early
-12. Validate URL argument required (if not in special modes above)
-13. Validate URL format
-14. Validate `-o` + `-d` conflict
-15. Validate format
-16. Validate timeout
-17. Validate port
-18. Validate output path (if `-o`)
-19. Validate output directory (if `-d`)
-20. Execute fetch operation
+1. Cobra parses flags (unknown flags and `--color` with no value fail here)
+2. Cobra handles `--help` → exit early (no `PersistentPreRunE`; invalid `--color` is not validated)
+3. Validate `--color` (`auto`, `always`, `never`), resolve stderr colour, and install the logger (`PersistentPreRunE`)
+4. Cobra validates logging flags are mutually exclusive (`--verbose`, `--debug`)
+5. Cobra validates skill verbs are mutually exclusive (`--skill`, `--skill-install`, `--skill-list`, `--skill-uninstall`)
+6. Handle `--version` → exit early (wins over doctor, skill, url-file, and all other flags)
+7. Handle skill flags → print/install/list/uninstall, or usage-class error with other operation modes / URL positionals
+8. Handle `--doctor` → exit early
+9. Handle `--open-browser` without URL → exit early
+10. Handle `--list-tabs` → extract `--port` and logging flags, ignore all others, list tabs, exit early
+11. Handle `--all-tabs` → check for URL conflict, exit early
+12. Handle `--tab` → check for URL conflict, exit early
+13. Validate URL argument required (if not in special modes above)
+14. Validate URL format
+15. Validate `-o` + `-d` conflict
+16. Validate format
+17. Validate timeout
+18. Validate port
+19. Validate output path (if `-o`)
+20. Validate output directory (if `-d`)
+21. Execute fetch operation
 
 **Key Patterns:**
 

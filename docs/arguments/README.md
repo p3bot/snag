@@ -4,7 +4,7 @@
 
 **Status:** All arguments analyzed and documented ✅ | All inconsistencies resolved ✅
 
-**Last Updated:** 2026-08-29
+**Last Updated:** 2026-08-30
 
 ---
 
@@ -27,6 +27,7 @@
 - [**`--tab PATTERN`** / **`-t`** - Fetch from existing tab](./tab.md)
 - [**`--verbose`** - Verbose logging](./verbose.md)
 - [**`--debug`** - Debug logging](./debug.md)
+- [**`--color MODE`** - Colour stderr diagnostics](./color.md)
 - [**`--help`** / **`-h`** - Show help](./help.md)
 - [**`--version`** / **`-v`** - Show version](./version.md)
 - [**`--all-tabs`** / **`-a`** - Process all open tabs](./all-tabs.md)
@@ -84,10 +85,11 @@
 
 ### Logging Flags
 
-| Flag        | Aliases | Type | Default | Description                                    |
-| ----------- | ------- | ---- | ------- | ---------------------------------------------- |
-| `--verbose` | -       | Bool | `false` | Enable verbose logging (fetch/connection/batch) |
-| `--debug`   | -       | Bool | `false` | Enable debug output                            |
+| Flag        | Aliases | Type   | Default | Description                                    |
+| ----------- | ------- | ------ | ------- | ---------------------------------------------- |
+| `--verbose` | -       | Bool   | `false` | Enable verbose logging (fetch/connection/batch) |
+| `--debug`   | -       | Bool   | `false` | Enable debug output                            |
+| `--color`   | -       | String | `auto`  | Colour stderr diagnostics: `auto`, `always`, `never` |
 
 ### Request Control Flags
 
@@ -373,7 +375,7 @@ See [skill.md](./skill.md) for complete details.
 
 **Compatible Flags:**
 
-- ✅ `--verbose` / `--debug`
+- ✅ `--verbose` / `--debug` / `--color`
 - ✅ `--local` with install, list, or uninstall
 - ✅ Repeat `--skill-install=id` / `--skill-uninstall=id`
 

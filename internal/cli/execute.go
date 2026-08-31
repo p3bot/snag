@@ -19,3 +19,17 @@ func Execute() error {
 	}
 	return err
 }
+
+// FormatError formats the process-level Error: line using the parsed --color
+// value. Invalid --color falls back to auto so the rejection itself is not
+// painted with the bad mode.
+func FormatError(err error) string {
+	if err == nil {
+		return ""
+	}
+	useColor, rerr := logger.ResolveColor(colorMode)
+	if rerr != nil {
+		useColor, _ = logger.ResolveColor(logger.ColorAuto)
+	}
+	return logger.FormatErrorLine(err, useColor)
+}

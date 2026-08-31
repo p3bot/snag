@@ -66,7 +66,7 @@ A following token is a positional URL, not an agent id. Use `--skill-install=gro
 3. Skill mode vs `--doctor` / `--kill-browser` / content operations: usage-class error (neither side runs)
 4. Skill verbs among themselves: mutually exclusive
 
-`--verbose` / `--debug` work with skill modes.
+`--verbose` / `--debug` / `--color` work with skill modes.
 
 Fetch modifiers (`--format`, `-o`, `-d`, `--timeout`, `--wait-for`, `--port`, and similar) are ignored, same as `--kill-browser`.
 
@@ -104,6 +104,7 @@ Fetch modifiers (`--format`, `-o`, `-d`, `--timeout`, `--wait-for`, `--port`, an
 | ----------- | -------- |
 | Skill verb + `--verbose` | Verbose logging |
 | Skill verb + `--debug` | Debug logging |
+| Skill verb + `--color` | Colour stderr diagnostics |
 | `--skill-install` + `--local` | Project-local roots |
 | `--skill-install=id` repeated | All named ids apply (path de-dupe) |
 

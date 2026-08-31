@@ -22,8 +22,8 @@ Snag has a comprehensive test suite covering unit tests, integration tests, and 
 
 ### Test Statistics
 
-- **Total Test Functions**: 170
-- **Test Files**: 10 (`*_test.go`)
+- **Total Test Functions**: 268
+- **Test Files**: 17 (`*_test.go`)
 - **Interactive Test Cases**: 73 (CSV-driven)
 - **Test Code Lines**: ~3,100 lines
 - **Production Code Lines**: ~2,500 lines
@@ -41,7 +41,7 @@ Snag has a comprehensive test suite covering unit tests, integration tests, and 
 
 ## Test Files
 
-### 1. `internal/cli/cli_test.go` (62 tests, 1,600 lines)
+### 1. `internal/cli/cli_test.go` (80 tests, 1,600 lines)
 
 **Purpose**: Integration tests for CLI functionality and browser interactions
 
@@ -74,6 +74,8 @@ TestCLI_InvalidFormat()      // Tests format validation
 - Browser-required tests: Skipped if no browser available
 - Output verification: Checks stdout, stderr, and files
 - Assertion helpers: `assertContains()`, `assertNoError()`, `assertExitCode()`
+
+`internal/cli/execute_test.go` (1 test): `TestFormatError()` — process-level `Error:` prefix follows `--color` (`always` / `never` / invalid falls back to `auto`).
 
 ### 2. `internal/output/output_test.go` (10 tests)
 
@@ -152,7 +154,7 @@ TestValidateUserAgent_SecuritySanitization()
 "<a href='...'>link</a>" → "link text + URL"
 ```
 
-### 5. `internal/logger/logger_test.go` (9 tests)
+### 5. `internal/logger/logger_test.go` (13 tests)
 
 **Purpose**: Tests logging functionality and utility functions
 
@@ -165,8 +167,12 @@ TestValidateUserAgent_SecuritySanitization()
 - `TestLogger_QuietMode()` - Quiet mode (no output)
 - `TestLogger_VerboseMode()` - Verbose mode
 - `TestLogger_StderrOnly()` - Stderr-only output
-- `TestShouldUseColor()` - NO_COLOR environment variable handling (3 cases)
+- `TestUseColor()` - `--color` / `NO_COLOR` / `FORCE_COLOR` / `TERM=dumb` / TTY matrix
+- `TestResolveColor()` - invalid `--color` and returned colour bool
+- `TestFormatErrorLine()` - `Error:` prefix ANSI follows the colour bool argument
 - `TestNewLogger()` - Logger constructor for all log levels (4 cases)
+- `TestSetDefault_PackageFuncs()` - package-level logger swap
+- `TestSetDefault_Concurrent()` - concurrent SetDefault / Info
 
 ### 6. `internal/browser/browser_test.go` (6 tests)
 

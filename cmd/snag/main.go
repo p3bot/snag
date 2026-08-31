@@ -21,7 +21,7 @@ func main() {
 		os.Exit(code)
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		fmt.Fprintln(os.Stderr, cli.FormatError(err))
 		os.Exit(cli.ExitCodeError)
 	}
 }

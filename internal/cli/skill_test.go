@@ -120,6 +120,7 @@ func resetCLIFlags() {
 	info = false
 	verbose = false
 	debug = false
+	colorMode = logger.ColorAuto
 	userAgent = ""
 	userDataDir = ""
 	skillPrint = false

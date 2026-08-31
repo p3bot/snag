@@ -56,6 +56,8 @@ snag --doctor                # environment diagnostics
 
 `--verbose` and `--debug` (mutually exclusive). No `--quiet`.
 
+`--color auto|always|never` (default `auto`) is stderr-only. `--color=always` and `--color=never` override `NO_COLOR`. In `auto`, `NO_COLOR` (non-empty) wins over `FORCE_COLOR` and TTY. `--color=always` does not paint page content.
+
 ## Exit codes
 
 - 0 success
@@ -80,7 +82,7 @@ snag --skill-uninstall=id [--skill-uninstall=id]... [--local]
 - Do not mix a valueless `--skill-install` / `--skill-uninstall` with `=id` on the same line.
 - `--skill-list` takes no ids. Default set only.
 - `--local`: project skills roots. Requires a working directory. Global (default) still runs if Getwd fails.
-- Skill flags are mutually exclusive with each other and with `--doctor`, `--kill-browser`, `--list-tabs`, `--open-browser`, `--info`, `--tab`, `--all-tabs`, `--url-file`, and URL positionals. `--help` and `--version` win. `--verbose` / `--debug` work. Fetch modifiers (`--format`, `-o`, `-d`, `--timeout`, `--wait-for`, `--port`, and similar) are ignored.
+- Skill flags are mutually exclusive with each other and with `--doctor`, `--kill-browser`, `--list-tabs`, `--open-browser`, `--info`, `--tab`, `--all-tabs`, `--url-file`, and URL positionals. `--help` and `--version` win. `--verbose` / `--debug` / `--color` work. Fetch modifiers (`--format`, `-o`, `-d`, `--timeout`, `--wait-for`, `--port`, and similar) are ignored.
 - Catalog unavailable/invalid: fail closed; run `snag --skill` and place the file manually. Errors do not invent paths.
 
 Reports (stdout; paths sorted):

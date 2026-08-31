@@ -69,11 +69,7 @@ func ErrorWithSuggestion(errMsg, suggestion string) {
 }
 
 func New(level LogLevel) *Logger {
-	return &Logger{
-		level:  level,
-		color:  shouldUseColor(),
-		writer: os.Stderr,
-	}
+	return NewWithWriter(level, os.Stderr, UseColor(ColorAuto, stderrIsTTY()))
 }
 
 func NewWithWriter(level LogLevel, w io.Writer, color bool) *Logger {
@@ -86,19 +82,6 @@ func NewWithWriter(level LogLevel, w io.Writer, color bool) *Logger {
 
 func Discard() *Logger {
 	return NewWithWriter(LevelQuiet, io.Discard, false)
-}
-
-func shouldUseColor() bool {
-	if os.Getenv("NO_COLOR") != "" {
-		return false
-	}
-
-	fileInfo, err := os.Stderr.Stat()
-	if err != nil {
-		return false
-	}
-
-	return (fileInfo.Mode() & os.ModeCharDevice) != 0
 }
 
 func (l *Logger) Success(format string, args ...interface{}) {

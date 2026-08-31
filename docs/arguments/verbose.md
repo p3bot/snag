@@ -73,6 +73,7 @@ snag --list-tabs --verbose
 - `--verbose` + `--doctor` - Works normally (verbose logs during diagnostic operations)
 - `--verbose` + `--kill-browser` - Works normally (verbose logs showing PIDs and process details)
 - `--verbose` + skill verb - Works normally (verbose logging during skill modes)
+- `--verbose` + `--color` - Works normally (colours verbose stderr when the detector is on)
 - `--verbose` + `--user-data-dir` - Works normally (verbose logs with custom profile)
 - `--verbose` + `--user-agent` - Works normally (verbose logs with custom UA)
 - `--verbose` + all browser/output/timing flags - Works normally
@@ -100,15 +101,14 @@ snag https://example.com --verbose --debug          # Error: mutually exclusive
 **Location:**
 
 - Flag definition: `internal/cli/root.go` (`init`)
-- Logger initialization: `internal/cli/root.go` (`runCobra`)
+- Logger initialization: `internal/cli/root.go` (`PersistentPreRunE`)
 - Logging level: `internal/logger`
 
 **Processing:**
 
-1. Cobra validates that `--verbose` and `--debug` are not both present (mutually exclusive)
-2. Check if `--verbose` flag is set
-3. Initialize logger with verbose level
-4. All subsequent operations use verbose logging
+1. Validate `--color` and install the logger with verbose/debug/normal level (`PersistentPreRunE`)
+2. Cobra validates that `--verbose` and `--debug` are not both present (mutually exclusive)
+3. All subsequent operations use verbose logging
 
 **Logging Behavior:**
 

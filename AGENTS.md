@@ -151,7 +151,7 @@ rm -f snag snag-*
 **Logging:**
 
 - Use custom Logger with 4 levels (quiet, normal, verbose, debug). Quiet is internal (errors-only); there is no `--quiet` flag
-- User-facing logging flags: `--verbose` and `--debug` (mutually exclusive)
+- User-facing logging flags: `--verbose` and `--debug` (mutually exclusive); `--color auto|always|never` (default `auto`) colours stderr diagnostics only
 - Default (normal): warnings, errors, and result announcements. Connection, fetch, and batch progress is silent
 - Log to stderr only (stdout reserved for content)
 - Success messages: `logger.Success("Saved to output.md")`

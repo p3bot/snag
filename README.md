@@ -725,6 +725,9 @@ snag --skill-uninstall
 ### Logging/Debugging
 
 ```
+--color <MODE>             Colour stderr diagnostics: auto (default) | always | never
+                           stdout (page content, --list-tabs) is never coloured
+                           --color=always|never override NO_COLOR; in auto, NO_COLOR wins over FORCE_COLOR
 --verbose                  Enable verbose logging output (connection, fetch, and batch progress)
 --debug                    Enable debug output with CDP messages
 ```

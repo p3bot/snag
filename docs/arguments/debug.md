@@ -58,6 +58,7 @@ snag https://example.com --debug
 - `--debug` + `--doctor` - Works normally (debug logs during diagnostic operations)
 - `--debug` + `--kill-browser` - Works normally (debug logs showing commands executed)
 - `--debug` + skill verb - Works normally (debug logging during skill modes)
+- `--debug` + `--color` - Works normally (colours debug stderr when the detector is on)
 - `--debug` + `--user-data-dir` - Works normally (debug logs with custom profile)
 - `--debug` + `--user-agent` - Works normally (debug logs with custom UA)
 - `--debug` + all browser/output/timing flags - Works normally
@@ -85,16 +86,15 @@ snag https://example.com --debug --verbose          # Error: mutually exclusive
 **Location:**
 
 - Flag definition: `internal/cli/root.go` (`init`)
-- Logger initialization: `internal/cli/root.go` (`runCobra`)
+- Logger initialization: `internal/cli/root.go` (`PersistentPreRunE`)
 - Logging level: `internal/logger`
 
 **Processing:**
 
-1. Cobra validates that `--verbose` and `--debug` are not both present (mutually exclusive)
-2. Check if `--debug` flag is set
-3. Initialize logger with debug level
-4. All subsequent operations use debug logging
-5. CDP messages logged via rod's debug capabilities
+1. Validate `--color` and install the logger with verbose/debug/normal level (`PersistentPreRunE`)
+2. Cobra validates that `--verbose` and `--debug` are not both present (mutually exclusive)
+3. All subsequent operations use debug logging
+4. CDP messages logged via rod's debug capabilities
 
 **Logging Behavior:**
 
