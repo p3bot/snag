@@ -264,6 +264,12 @@ go test -v -cover ./...              # With coverage
 
 ## Architecture
 
+**CLI surface:**
+
+- Single Cobra root. No product subcommands. Do not add `snag tabs list`, `snag skill`, or `snag completion`.
+- First clear-text positional is always a URL/address (bare hosts allowed). `snag skill` fetches host `skill`.
+- Product modes are flags: `--list-tabs`, `--all-tabs`, `--open-browser`, `--kill-browser`, `--doctor`, `--skill`, `--skill-install`, `--skill-list`, `--skill-uninstall`.
+
 **File Structure:**
 
 - `cmd/snag/main.go` - Thin entry point (`cli.Execute`, exit codes)
@@ -505,7 +511,6 @@ Third-party licenses in `LICENSES/` directory.
 
 - **README.md**: User-facing documentation and usage examples
 - **PROJECT.md**: Current project status and work tracking
-- **.agents/design/design-records/dr-001-snag-design.md**: Comprehensive design decisions and rationale (33 design decisions documented)
 - **.agents/tasks/**: Task documents (code-review, release-process, etc.)
 - **docs/arguments/**: Complete argument compatibility matrix
 - **docs/testing.md**: Testing documentation and strategies

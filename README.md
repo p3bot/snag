@@ -104,6 +104,8 @@ go build -o snag ./cmd/snag
 
 ## Usage
 
+Arguments after flags are URLs, not verbs. Product modes are flags (`--list-tabs`, `--doctor`, `--skill`); `snag skill` fetches host `skill`.
+
 ### Basic Examples
 
 ```bash
