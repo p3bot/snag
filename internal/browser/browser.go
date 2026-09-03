@@ -32,8 +32,11 @@ import (
 )
 
 const (
-	ConnectTimeout   = 10 * time.Second
-	StabilizeTimeout = 3 * time.Second
+	ConnectTimeout = 10 * time.Second
+	// HTTPIdle is how long short-lived HTTP must stay quiet after load
+	// before fetch continues. Websockets, EventSource, media, images,
+	// and fonts are ignored. This is idle time, not a deadline.
+	HTTPIdle = 500 * time.Millisecond
 )
 
 type BrowserManager struct {

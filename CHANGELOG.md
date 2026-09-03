@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fetch waits for `window.onload` (bounded by `--timeout`) instead of Rod `WaitStable`, so animated SPAs no longer hang and slow loads are not clipped at 3s. After load, a short HTTP-idle wait is best-effort; polling does not fail the fetch. If `load` does not fire in time, snag errors instead of printing a half page
+- JavaScript `alert`/`confirm`/`prompt` dialogs are dismissed so they cannot block content extraction
 - `--info` domain field no longer truncates IPv6 hostnames
 - Auto-generated filenames no longer mangle IPv6 hosts when falling back to a URL slug
 - `--doctor` counts tabs via Chrome's HTTP `/json/list` instead of attaching a DevTools session

@@ -2,6 +2,8 @@
 
 **Status:** Complete (2025-10-22)
 
+Design: [When is a page ready to fetch?](../page-load-waiting.md)
+
 #### Validation Rules
 
 **Value Validation:**
@@ -28,7 +30,8 @@
 
 **Scope:**
 
-- Timeout applies to **page navigation** and **`--wait-for` selector waiting**
+- Timeout applies to **page navigation**, **`window.onload`**, and **`--wait-for` selector waiting**
+- After load, snag also waits briefly for short-lived HTTP to go quiet; that wait is bounded by whatever remains of `--timeout`, and if HTTP never quiets, fetch continues
 - Does not apply to format conversion or PDF/PNG generation
 - Default timeout: 30 seconds (if flag not specified)
 
@@ -38,8 +41,8 @@
 snag https://example.com --timeout 60
 ```
 
-- Sets 60-second timeout for initial page navigation
-- If page doesn't load within 60s → Error: `"Page load timeout"`
+- Sets 60-second timeout for navigation and `window.onload`
+- If the load event does not fire within 60s → Error: `"page load timeout exceeded"`
 - Also applies to `--wait-for` selector waiting (if used)
 - Does not affect format conversion time
 
@@ -178,19 +181,21 @@ snag --open-browser --timeout 30                    # Timeout ignored, browser o
 
 - Flag definition: `internal/cli/root.go` (`init`)
 - Timeout validation: `internal/validate` (`Timeout`)
-- Timeout application: `internal/browser` (`Page.NavigateTimeout`) and `internal/fetch` (`Fetch`, `WaitForSelector`)
+- Timeout application: `internal/fetch` (`Fetch` arms `Page.WaitLoad` and `Page.WaitHTTPIdle` then `Page.Navigate`, one clock; `WaitForSelector` uses the same value as a fresh wait). `Page.NavigateTimeout` is used when `--open-browser` opens URL tabs without fetching.
 
 **Processing Flow:**
 
 1. Validate timeout value (positive integer only)
 2. Check for conflicts (multiple flags, tab operations, list-tabs)
-3. Apply timeout to page navigation via CDP
-4. If timeout expires → Return timeout error
-5. Continue with content extraction (not subject to navigation timeout)
+3. Apply timeout to navigation and `window.onload` via a shared context deadline
+4. If `load` does not fire in time → Return timeout error (no half page)
+5. After load, wait briefly for short-lived HTTP to go quiet (best-effort; does not fail the fetch)
+6. Continue with content extraction (not subject to the navigation/load timeout)
 
 **Scope Clarification:**
 
-- Navigation timeout: Time for page to load and become ready
+- Navigation timeout: Time for navigation plus `window.onload`
+- HTTP idle wait: Quiet period after load; bounded by whatever remains of `--timeout`; if HTTP never quiets, fetch continues
 - Selector wait timeout: Time for `--wait-for` selector to appear (uses same timeout value)
 - Does NOT include:
   - Format conversion time (HTML → Markdown, Text)

@@ -2,6 +2,8 @@
 
 **Status:** Complete (2025-10-23)
 
+Design: [When is a page ready to fetch?](../page-load-waiting.md) — `--wait-for` is the escape hatch when `load` + HTTP idle is not enough.
+
 #### Validation Rules
 
 **Invalid Values:**

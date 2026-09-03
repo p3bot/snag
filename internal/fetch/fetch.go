@@ -38,6 +38,15 @@ func NewPageFetcher(page *browser.Page, timeout int) *PageFetcher {
 	}
 }
 
+func pageLoadTimeout(opts FetchOptions) error {
+	logger.Error("Page load timeout exceeded (%ds)", opts.Timeout)
+	logger.ErrorWithSuggestion(
+		"The page took too long to load",
+		fmt.Sprintf("snag %s --timeout 60", opts.URL),
+	)
+	return ErrPageLoadTimeout
+}
+
 func fetchCanceled(ctx context.Context, err error) error {
 	if ctx != nil && ctx.Err() != nil {
 		return ctx.Err()
@@ -61,31 +70,55 @@ func (pf *PageFetcher) Fetch(ctx context.Context, opts FetchOptions) (string, er
 
 	logger.Verbose("Fetching %s...", opts.URL)
 
+	waitCtx, cancel := context.WithTimeout(ctx, pf.timeout)
+	defer cancel()
+
+	waitIdle, err := pf.page.WaitHTTPIdle(waitCtx, browser.HTTPIdle)
+	if err != nil {
+		if e := fetchCanceled(ctx, err); e != nil {
+			return "", e
+		}
+		return "", fmt.Errorf("%w: %w", ErrNavigationFailed, err)
+	}
+
+	waitLoad, err := pf.page.WaitLoad(waitCtx)
+	if err != nil {
+		if e := fetchCanceled(ctx, err); e != nil {
+			return "", e
+		}
+		return "", fmt.Errorf("%w: %w", ErrNavigationFailed, err)
+	}
+
 	logger.Verbose("Navigating to %s (timeout: %ds)...", opts.URL, opts.Timeout)
 
-	err := pf.page.NavigateTimeout(opts.URL, pf.timeout)
+	err = pf.page.Navigate(waitCtx, opts.URL)
 	if err != nil {
 		if e := fetchCanceled(ctx, err); e != nil {
 			return "", e
 		}
 		if errors.Is(err, context.DeadlineExceeded) {
-			logger.Error("Page load timeout exceeded (%ds)", opts.Timeout)
-			logger.ErrorWithSuggestion(
-				"The page took too long to load",
-				fmt.Sprintf("snag %s --timeout 60", opts.URL),
-			)
-			return "", ErrPageLoadTimeout
+			return "", pageLoadTimeout(opts)
 		}
 		return "", fmt.Errorf("%w: %w", ErrNavigationFailed, err)
 	}
 
-	logger.Verbose("Waiting for page to stabilize...")
-	err = pf.page.WaitStable(browser.StabilizeTimeout)
-	if err != nil {
+	logger.Verbose("Waiting for page load...")
+	if err := waitLoad(); err != nil {
 		if e := fetchCanceled(ctx, err); e != nil {
 			return "", e
 		}
-		logger.Warning("Page did not stabilize: %v", err)
+		if errors.Is(err, context.DeadlineExceeded) {
+			return "", pageLoadTimeout(opts)
+		}
+		return "", fmt.Errorf("%w: %w", ErrNavigationFailed, err)
+	}
+
+	logger.Verbose("Waiting for HTTP to go idle...")
+	if err := waitIdle(); err != nil {
+		if e := fetchCanceled(ctx, err); e != nil {
+			return "", e
+		}
+		logger.Verbose("HTTP did not go idle: %v", err)
 	}
 
 	if opts.WaitFor != "" {

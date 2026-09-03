@@ -6,7 +6,10 @@
 
 package browser
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestWrapPage_Nil(t *testing.T) {
 	if wrapPage(nil) != nil {
@@ -26,8 +29,14 @@ func TestPageNilGuards(t *testing.T) {
 	if err := p.NavigateTimeout("https://example.com", 0); err == nil {
 		t.Error("NavigateTimeout: expected error for nil page")
 	}
-	if err := p.WaitStable(0); err == nil {
-		t.Error("WaitStable: expected error for nil page")
+	if err := p.Navigate(context.Background(), "https://example.com"); err == nil {
+		t.Error("Navigate: expected error for nil page")
+	}
+	if _, err := p.WaitLoad(context.Background()); err == nil {
+		t.Error("WaitLoad: expected error for nil page")
+	}
+	if _, err := p.WaitHTTPIdle(context.Background(), 0); err == nil {
+		t.Error("WaitHTTPIdle: expected error for nil page")
 	}
 	if _, err := p.NavigationStatus(); err == nil {
 		t.Error("NavigationStatus: expected error for nil page")

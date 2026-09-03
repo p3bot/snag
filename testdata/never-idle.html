@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Never Idle</title>
+</head>
+<body>
+    <h1>Never Idle Heading</h1>
+    <p>Content is present while the DOM keeps changing.</p>
+    <div id="ticks"></div>
+    <script>
+        setInterval(function() {
+            var p = document.createElement('p');
+            p.textContent = 'tick ' + Date.now();
+            document.getElementById('ticks').appendChild(p);
+        }, 200);
+    </script>
+</body>
+</html>

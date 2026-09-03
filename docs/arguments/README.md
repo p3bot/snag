@@ -38,6 +38,7 @@
 ### Advanced Topics
 
 - [**Validation Rules**](./validation.md) - Validation order and cross-cutting rules
+- [**Page load waiting**](../page-load-waiting.md) - When fetch treats a page as ready (`load`, HTTP idle, `--timeout`)
 
 ---
 

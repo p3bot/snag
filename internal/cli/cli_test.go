@@ -8,6 +8,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/p3bot/snag/internal/testutil"
 )
@@ -1121,6 +1123,232 @@ func TestBrowser_DefaultTimeout(t *testing.T) {
 
 	output := stderr
 	_ = output
+}
+
+// runSnagBounded runs snag and fails the test if it exceeds the deadline.
+func runSnagBounded(t *testing.T, timeout time.Duration, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, snagBin, args...)
+	cmd.Dir = testutil.ModuleRoot()
+
+	stdoutBytes, stderrBytes, err := runCommand(cmd)
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Fatalf("snag hung after %s: args=%v stderr=%s", timeout, args, stderrBytes)
+	}
+	return string(stdoutBytes), string(stderrBytes), err
+}
+
+// TestBrowser_NeverIdlePage tests that a page which never stops mutating
+// the DOM still returns content instead of hanging.
+func TestBrowser_NeverIdlePage(t *testing.T) {
+	if !isBrowserAvailable() {
+		t.Skip("Browser not available, skipping browser integration test")
+	}
+
+	server := startTestServer(t)
+	url := server.URL + "/never-idle.html"
+
+	stdout, stderr, err := runSnagBounded(t, 20*time.Second, url)
+
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+	assertContains(t, stdout, "# Never Idle Heading")
+	_ = stderr
+}
+
+// TestBrowser_NeverIdleHTTP tests that a page which never stops issuing
+// short-lived HTTP still returns content instead of hanging.
+func TestBrowser_NeverIdleHTTP(t *testing.T) {
+	if !isBrowserAvailable() {
+		t.Skip("Browser not available, skipping browser integration test")
+	}
+
+	server := startTestServer(t)
+	url := server.URL + "/never-idle-http.html"
+
+	stdout, stderr, err := runSnagBounded(t, 20*time.Second, "--timeout", "5", url)
+
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+	assertContains(t, stdout, "# Never Idle HTTP Heading")
+	_ = stderr
+}
+
+// TestBrowser_JSDialogDismissed tests that alert() on load does not block fetch.
+func TestBrowser_JSDialogDismissed(t *testing.T) {
+	if !isBrowserAvailable() {
+		t.Skip("Browser not available, skipping browser integration test")
+	}
+
+	server := startTestServer(t)
+	url := server.URL + "/js-dialog.html"
+
+	stdout, stderr, err := runSnagBounded(t, 20*time.Second, url)
+
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+	assertContains(t, stdout, "# Behind the alert")
+	_ = stderr
+}
+
+// TestBrowser_JSConfirmCancelled tests that confirm() is dismissed (Cancel),
+// so the page takes the false branch instead of acting as if the user clicked OK.
+func TestBrowser_JSConfirmCancelled(t *testing.T) {
+	if !isBrowserAvailable() {
+		t.Skip("Browser not available, skipping browser integration test")
+	}
+
+	server := startTestServer(t)
+	url := server.URL + "/js-confirm.html"
+
+	stdout, stderr, err := runSnagBounded(t, 20*time.Second, url)
+
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+	assertContains(t, stdout, "cancelled")
+	assertNotContains(t, stdout, "accepted")
+	_ = stderr
+}
+
+// TestBrowser_SlowSubresource waits for a script that blocks onload for
+// longer than the old 3s dump cap, and still includes the injected text.
+func TestBrowser_SlowSubresource(t *testing.T) {
+	if !isBrowserAvailable() {
+		t.Skip("Browser not available, skipping browser integration test")
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!DOCTYPE html>
+<html>
+<head><title>Slow Subresource</title></head>
+<body>
+<h1>Slow Page</h1>
+<p id="slot">pending</p>
+<script src="/slow.js"></script>
+</body>
+</html>`))
+	})
+	mux.HandleFunc("/slow.js", func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(4 * time.Second)
+		w.Header().Set("Content-Type", "application/javascript")
+		_, _ = w.Write([]byte(`document.getElementById('slot').textContent = 'Loaded after delay';`))
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	stdout, stderr, err := runSnagBounded(t, 25*time.Second, "--timeout", "15", server.URL)
+
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+	assertContains(t, stdout, "Loaded after delay")
+	_ = stderr
+}
+
+// TestBrowser_InFlightXHR waits for a fetch() started during parse that
+// finishes after window.onload, so the injected text is in the dump.
+func TestBrowser_InFlightXHR(t *testing.T) {
+	if !isBrowserAvailable() {
+		t.Skip("Browser not available, skipping browser integration test")
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!DOCTYPE html>
+<html>
+<head><title>In-flight XHR</title></head>
+<body>
+<h1>XHR Page</h1>
+<p id="slot">pending</p>
+<script>
+fetch('/data.json').then(function(r) { return r.json(); }).then(function(d) {
+  document.getElementById('slot').textContent = d.text;
+});
+</script>
+</body>
+</html>`))
+	})
+	mux.HandleFunc("/data.json", func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(2 * time.Second)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"text":"Loaded from XHR"}`))
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	stdout, stderr, err := runSnagBounded(t, 20*time.Second, "--timeout", "15", server.URL)
+
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+	assertContains(t, stdout, "Loaded from XHR")
+	_ = stderr
+}
+
+// TestBrowser_LoadNeverFires errors when a blocking subresource prevents
+// window.onload within --timeout, instead of printing a half-rendered page.
+func TestBrowser_LoadNeverFires(t *testing.T) {
+	if !isBrowserAvailable() {
+		t.Skip("Browser not available, skipping browser integration test")
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!DOCTYPE html>
+<html>
+<head><title>Hung Load</title></head>
+<body>
+<h1>Partial Heading</h1>
+<script src="/hang.js"></script>
+</body>
+</html>`))
+	})
+	mux.HandleFunc("/hang.js", func(w http.ResponseWriter, r *http.Request) {
+		hang(r, 30*time.Second)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	stdout, stderr, err := runSnagBounded(t, 15*time.Second, "--timeout", "3", server.URL)
+
+	assertExitCode(t, err, ExitCodeError)
+	assertContains(t, stderr, "timeout")
+	assertNotContains(t, stdout, "Partial Heading")
+}
+
+// TestBrowser_StreamedHTMLBody waits for the rest of a document that flushes
+// <head> first and the body two seconds later. Matching about:blank's load
+// plus 500ms HTTP idle would extract the head-only shell.
+func TestBrowser_StreamedHTMLBody(t *testing.T) {
+	if !isBrowserAvailable() {
+		t.Skip("Browser not available, skipping browser integration test")
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`<!DOCTYPE html><html><head><title>Stream Head</title></head>`))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		time.Sleep(2 * time.Second)
+		_, _ = w.Write([]byte(`<body><h1>Streamed Body Heading</h1></body></html>`))
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	stdout, stderr, err := runSnagBounded(t, 25*time.Second, "--timeout", "15", server.URL)
+
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+	assertContains(t, stdout, "Streamed Body Heading")
+	_ = stderr
 }
 
 // TestBrowser_CustomUserAgent tests --user-agent flag

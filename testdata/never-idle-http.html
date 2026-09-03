@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Never Idle HTTP</title>
+</head>
+<body>
+    <h1>Never Idle HTTP Heading</h1>
+    <p>Content is present while short-lived HTTP keeps firing.</p>
+    <script>
+        setInterval(function() {
+            fetch(location.href).catch(function() {});
+        }, 100);
+    </script>
+</body>
+</html>
