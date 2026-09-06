@@ -4,7 +4,7 @@
 
 #### Validation Rules
 
-Set a custom user agent string for browser requests. This flag allows you to customize how the browser identifies itself to web servers, useful for bypassing headless detection or testing different user agent scenarios.
+Set a custom user agent string for browser requests. This flag overrides how the launched Chrome process identifies itself. The default (no flag) is the real Chrome user agent for the host OS; launched sessions do not use Rod's laptop device emulation.
 
 **Invalid Values:**
 
@@ -140,7 +140,7 @@ All logging flags work normally with `--user-agent`:
 # Basic custom user agent
 snag --user-agent "CustomBot/1.0" https://example.com
 
-# Bypass headless detection
+# Pretend to be a specific desktop browser
 snag --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" https://example.com
 
 # With multiple URLs
@@ -199,11 +199,11 @@ snag --user-agent "UA\nwith\nnewlines" https://example.com  # → "UA with newli
 
 ## Use Cases
 
-**1. Bypass headless detection:**
+**1. Override identity:**
 
 ```bash
-# Some sites block headless browsers - use realistic desktop UA
-snag --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" https://protected-site.com
+# Default is the real Chrome UA; override only when you need a specific client
+snag --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" https://example.com
 ```
 
 **2. Mobile testing:**
@@ -249,7 +249,7 @@ snag --user-agent "Googlebot/2.1 (+http://www.google.com/bot.html)" https://my-s
 
 - Flag definition: `internal/cli/root.go` (`init`)
 - Validation/sanitization: `internal/validate` (`UserAgent`)
-- Application: `internal/browser` (launcher `--user-agent` flag on launch; ignored when attaching to an existing browser)
+- Application: `internal/browser` (launcher `--user-agent` flag on launch; HeadlessChrome stripped from the UA and Client Hints on new pages; ignored when attaching to an existing browser)
 
 **Validation rules:**
 

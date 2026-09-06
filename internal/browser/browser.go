@@ -26,7 +26,6 @@ import (
 	"github.com/p3bot/snag/internal/logger"
 
 	"github.com/go-rod/rod"
-	"github.com/go-rod/rod/lib/devices"
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/go-rod/rod/lib/proto"
 )
@@ -34,6 +33,12 @@ import (
 const (
 	ConnectTimeout   = 10 * time.Second
 	StabilizeTimeout = 3 * time.Second
+
+	// headlessWindow is the virtual display and window size for launched
+	// headless sessions. Chromium's headless default is 800x600; --screen-info
+	// sizes the display (Chrome 142+) and --window-size matches it.
+	headlessWindowWidth  = 1920
+	headlessWindowHeight = 1080
 )
 
 type BrowserManager struct {
@@ -213,15 +218,14 @@ func (bm *BrowserManager) connectToExisting(ctx context.Context) (*rod.Browser, 
 	}
 	logger.Debug("Resolved WebSocket URL: %s", wsURL)
 
-	browser := rod.New().Context(ctx).ControlURL(wsURL).Timeout(ConnectTimeout)
-
-	if err := browser.Connect(); err != nil {
+	browser, err := connectRod(ctx, wsURL)
+	if err != nil {
 		logger.Debug("Connection failed: %v", err)
 		return nil, fmt.Errorf("%w: %w", ErrBrowserConnection, err)
 	}
 	logger.Debug("Successfully connected to browser")
 
-	return browser.CancelTimeout(), nil
+	return browser, nil
 }
 
 func (bm *BrowserManager) launchBrowser(ctx context.Context, headless bool) (*rod.Browser, error) {
@@ -230,11 +234,9 @@ func (bm *BrowserManager) launchBrowser(ctx context.Context, headless bool) (*ro
 		return nil, err
 	}
 
-	l := launcher.New().Context(ctx).
+	l := withRealUserLaunchFlags(launcher.New().Context(ctx).
 		Bin(path).
-		Headless(headless).
-		Leakless(headless).
-		Set("disable-blink-features", "AutomationControlled")
+		Leakless(headless), headless)
 
 	if bm.userAgent != "" {
 		l = l.Set("user-agent", bm.userAgent)
@@ -258,9 +260,8 @@ func (bm *BrowserManager) launchBrowser(ctx context.Context, headless bool) (*ro
 	bm.wasLaunched = true
 	bm.launchedHeadless = headless
 
-	browser := rod.New().Context(ctx).ControlURL(controlURL).Timeout(ConnectTimeout)
-
-	if err := browser.Connect(); err != nil {
+	browser, err := connectRod(ctx, controlURL)
+	if err != nil {
 		logger.Debug("Failed to connect to launched browser: %v", err)
 		// Close() does not kill a visible browser, so a failed start must
 		// tear down here (interrupt and CDP failure both land on this path).
@@ -275,7 +276,7 @@ func (bm *BrowserManager) launchBrowser(ctx context.Context, headless bool) (*ro
 	}
 	logger.Debug("Successfully connected to launched browser")
 
-	return browser.CancelTimeout(), nil
+	return browser, nil
 }
 
 func (bm *BrowserManager) OpenBrowserOnly(ctx context.Context) error {
@@ -306,11 +307,9 @@ func (bm *BrowserManager) OpenBrowserOnly(ctx context.Context) error {
 		return err
 	}
 
-	l := launcher.New().Context(ctx).
+	l := withRealUserLaunchFlags(launcher.New().Context(ctx).
 		Bin(path).
-		Leakless(false).
-		Headless(false).
-		Set("disable-blink-features", "AutomationControlled").
+		Leakless(false), false).
 		Set("remote-debugging-port", fmt.Sprintf("%d", bm.port))
 
 	if bm.userAgent != "" {
@@ -335,8 +334,8 @@ func (bm *BrowserManager) OpenBrowserOnly(ctx context.Context) error {
 		}
 	}
 
-	browser := rod.New().Context(ctx).ControlURL(controlURL).Timeout(ConnectTimeout)
-	if err := browser.Connect(); err != nil {
+	browser, err := connectRod(ctx, controlURL)
+	if err != nil {
 		abandon()
 		return fmt.Errorf("%w: %w", ErrBrowserConnection, err)
 	}
@@ -365,25 +364,257 @@ func (bm *BrowserManager) NewPage() (*Page, error) {
 		return nil, fmt.Errorf("failed to create page: %w", err)
 	}
 
+	if err := applyRealUserPageIdentity(page, bm.browserName); err != nil {
+		logger.Warning("Failed to apply real Chrome identity: %v", err)
+	}
 	if bm.launchedHeadless {
-		// Set a sensible default viewport for headless mode (1920x1080 Full HD)
-		err := page.SetViewport(&proto.EmulationSetDeviceMetricsOverride{
-			Width:             1920,
-			Height:            1080,
-			DeviceScaleFactor: 1,
-			Mobile:            false,
-		})
-		if err != nil {
-			logger.Debug("Failed to set headless viewport: %v", err)
-		}
-	} else {
-		// Clear default viewport emulation so page fills the browser window
-		if err := page.Emulate(devices.Clear); err != nil {
-			logger.Debug("Failed to clear viewport emulation: %v", err)
+		if err := applyHeadlessWindowIdentity(page); err != nil {
+			logger.Warning("Failed to apply headless window identity: %v", err)
 		}
 	}
 
 	return wrapPage(page), nil
+}
+
+// connectRod attaches to a CDP endpoint without Rod's default laptop device
+// (Mac Chrome 114 user agent and 1280x800 viewport).
+func connectRod(ctx context.Context, controlURL string) (*rod.Browser, error) {
+	browser := rod.New().
+		NoDefaultDevice().
+		Context(ctx).
+		ControlURL(controlURL).
+		Timeout(ConnectTimeout)
+	if err := browser.Connect(); err != nil {
+		return nil, err
+	}
+	return browser.CancelTimeout(), nil
+}
+
+// withRealUserLaunchFlags drops Chromium automation tells so a launched
+// browser presents as a normal desktop Chrome: no --enable-automation,
+// navigator.webdriver reports false, new headless mode, and a real virtual
+// display (--screen-info) instead of CDP device-metrics emulation.
+func withRealUserLaunchFlags(l *launcher.Launcher, headless bool) *launcher.Launcher {
+	l = l.Delete("enable-automation").
+		Set("disable-blink-features", "AutomationControlled")
+	if headless {
+		return l.HeadlessNew(true).
+			Set("window-size", strconv.Itoa(headlessWindowWidth), strconv.Itoa(headlessWindowHeight)).
+			Set("screen-info", fmt.Sprintf("{%dx%d}", headlessWindowWidth, headlessWindowHeight))
+	}
+	return l.Headless(false)
+}
+
+type uaBrandJSON struct {
+	Brand   string `json:"brand"`
+	Version string `json:"version"`
+}
+
+type pageUAInfo struct {
+	UA              string        `json:"ua"`
+	Platform        string        `json:"platform"`
+	Brands          []uaBrandJSON `json:"brands"`
+	Mobile          bool          `json:"mobile"`
+	UAPlatform      string        `json:"uaPlatform"`
+	Architecture    string        `json:"architecture"`
+	Bitness         string        `json:"bitness"`
+	Model           string        `json:"model"`
+	PlatformVersion string        `json:"platformVersion"`
+	FullVersionList []uaBrandJSON `json:"fullVersionList"`
+	Wow64           bool          `json:"wow64"`
+	HighEntropy     bool          `json:"highEntropy"`
+}
+
+func desktopChromeUA(ua string) string {
+	return strings.ReplaceAll(ua, "HeadlessChrome", "Chrome")
+}
+
+func clientHintBrand(browserName string) string {
+	switch browserName {
+	case "Chrome":
+		return "Google Chrome"
+	case "Edge":
+		return "Microsoft Edge"
+	case "Ungoogled-Chromium", "":
+		return "Chromium"
+	default:
+		return browserName
+	}
+}
+
+func rewriteClientHintBrands(in []uaBrandJSON, headed string) []*proto.EmulationUserAgentBrandVersion {
+	out := make([]*proto.EmulationUserAgentBrandVersion, 0, len(in))
+	haveHeaded := false
+	stripped := false
+	headedVersion := ""
+	for _, b := range in {
+		if strings.Contains(b.Brand, "HeadlessChrome") {
+			stripped = true
+			headedVersion = b.Version
+			continue
+		}
+		if b.Brand == headed {
+			haveHeaded = true
+		}
+		out = append(out, &proto.EmulationUserAgentBrandVersion{
+			Brand:   b.Brand,
+			Version: b.Version,
+		})
+	}
+	if stripped && !haveHeaded && headed != "" {
+		out = append(out, &proto.EmulationUserAgentBrandVersion{
+			Brand:   headed,
+			Version: headedVersion,
+		})
+	}
+	return out
+}
+
+func brandsHaveHeadlessChrome(in []uaBrandJSON) bool {
+	for _, b := range in {
+		if strings.Contains(b.Brand, "HeadlessChrome") {
+			return true
+		}
+	}
+	return false
+}
+
+func hasHeadlessChrome(info pageUAInfo) bool {
+	return strings.Contains(info.UA, "HeadlessChrome") ||
+		brandsHaveHeadlessChrome(info.Brands) ||
+		brandsHaveHeadlessChrome(info.FullVersionList)
+}
+
+func uaCHPlatform(info pageUAInfo) string {
+	if info.UAPlatform != "" {
+		return info.UAPlatform
+	}
+	switch {
+	case strings.Contains(info.UA, "Linux"):
+		return "Linux"
+	case strings.Contains(info.UA, "Windows"):
+		return "Windows"
+	case strings.Contains(info.UA, "Mac"):
+		return "macOS"
+	default:
+		return ""
+	}
+}
+
+// userAgentOverride rewrites HeadlessChrome in the user agent string and,
+// when high-entropy collection succeeded, in Client Hint brands. A custom
+// --user-agent string is left unchanged; brands are still rewritten so
+// HeadlessChrome cannot leak through Sec-CH-UA. Blank architecture /
+// platformVersion must not replace Chrome's real values.
+func userAgentOverride(info pageUAInfo, browserName string) *proto.NetworkSetUserAgentOverride {
+	headlessUA := strings.Contains(info.UA, "HeadlessChrome")
+	if !hasHeadlessChrome(info) {
+		return nil
+	}
+	if !info.HighEntropy && !headlessUA {
+		// Custom UA with HeadlessChrome brands, but no hints to rewrite.
+		return nil
+	}
+	req := &proto.NetworkSetUserAgentOverride{
+		UserAgent: desktopChromeUA(info.UA),
+		Platform:  info.Platform,
+	}
+	if !info.HighEntropy {
+		return req
+	}
+	headed := clientHintBrand(browserName)
+	req.UserAgentMetadata = &proto.EmulationUserAgentMetadata{
+		Brands:          rewriteClientHintBrands(info.Brands, headed),
+		FullVersionList: rewriteClientHintBrands(info.FullVersionList, headed),
+		Platform:        uaCHPlatform(info),
+		PlatformVersion: info.PlatformVersion,
+		Architecture:    info.Architecture,
+		Model:           info.Model,
+		Mobile:          info.Mobile,
+		Bitness:         info.Bitness,
+		Wow64:           info.Wow64,
+	}
+	return req
+}
+
+// applyRealUserPageIdentity strips HeadlessChrome from a launched page's UA
+// and Client Hints. Architecture, bitness, and platform version come from
+// the browser's high-entropy hints; only the HeadlessChrome token is rewritten.
+func applyRealUserPageIdentity(page *rod.Page, browserName string) error {
+	res, err := page.Eval(`async () => {
+		const ua = navigator.userAgent;
+		const uad = navigator.userAgentData;
+		const info = {
+			ua: ua,
+			platform: navigator.platform,
+			brands: uad ? uad.brands : [],
+			mobile: uad ? uad.mobile : false,
+			uaPlatform: uad ? uad.platform : "",
+			architecture: "",
+			bitness: "",
+			model: "",
+			platformVersion: "",
+			fullVersionList: [],
+			wow64: false,
+			highEntropy: false
+		};
+		const headlessBrand = info.brands.some(function (b) {
+			return String(b.brand).includes("HeadlessChrome");
+		});
+		if ((!ua.includes("HeadlessChrome") && !headlessBrand) || !uad || !uad.getHighEntropyValues) {
+			return JSON.stringify(info);
+		}
+		try {
+			const high = await uad.getHighEntropyValues([
+				"architecture",
+				"bitness",
+				"model",
+				"platform",
+				"platformVersion",
+				"fullVersionList",
+				"wow64"
+			]);
+			info.architecture = high.architecture || "";
+			info.bitness = high.bitness || "";
+			info.model = high.model || "";
+			info.uaPlatform = high.platform || info.uaPlatform;
+			info.platformVersion = high.platformVersion || "";
+			info.fullVersionList = high.fullVersionList || [];
+			info.wow64 = !!high.wow64;
+			if (high.brands && high.brands.length) {
+				info.brands = high.brands;
+			}
+			info.highEntropy = true;
+		} catch (e) {}
+		return JSON.stringify(info);
+	}`)
+	if err != nil {
+		return err
+	}
+
+	var info pageUAInfo
+	if err := json.Unmarshal([]byte(res.Value.Str()), &info); err != nil {
+		return err
+	}
+	req := userAgentOverride(info, browserName)
+	if req == nil {
+		return nil
+	}
+	return page.SetUserAgent(req)
+}
+
+func applyHeadlessWindowIdentity(page *rod.Page) error {
+	width, height := headlessWindowWidth, headlessWindowHeight
+	// --window-size and --screen-info size the window and virtual display.
+	// headless=new still reports outerWidth/outerHeight as 0 after
+	// setWindowBounds. Do not replace the getter in page JS to hide that:
+	// a non-native getter is itself a headless tell. Chromium may already
+	// expose outerWidth as an own native property.
+	return page.SetWindow(&proto.BrowserBounds{
+		Width:       &width,
+		Height:      &height,
+		WindowState: proto.BrowserWindowStateNormal,
+	})
 }
 
 func (bm *BrowserManager) Close() {

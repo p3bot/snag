@@ -183,7 +183,7 @@ OPTIONS:
   -c, --close-tab              Close the browser tab after fetching content
       --force-headless         Force headless mode even if the browser is running
   -p, --port int               Chromium/Chrome remote debugging port (default 9222)
-      --user-agent string      Custom user agent (bypass headless detection)
+      --user-agent string      Override the browser user agent
       --user-data-dir string   Custom Chromium/Chrome user data directory (for session isolation)
 
       --timeout int            Page load timeout in seconds (default %d)
@@ -222,7 +222,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&flagFormat, "format", "f", format.Markdown, "Output format: md | html | text | pdf | png")
 	rootCmd.Flags().StringVarP(&waitFor, "wait-for", "w", "", "Wait for CSS selector before extracting content")
 	rootCmd.Flags().StringVarP(&tab, "tab", "t", "", "Fetch from existing tab by pattern (tab number or string)")
-	rootCmd.Flags().StringVar(&userAgent, "user-agent", "", "Custom user agent (bypass headless detection)")
+	rootCmd.Flags().StringVar(&userAgent, "user-agent", "", "Override the browser user agent")
 	rootCmd.Flags().StringVar(&userDataDir, "user-data-dir", "", "Custom Chromium/Chrome user data directory (for session isolation)")
 
 	rootCmd.Flags().IntVar(&timeout, "timeout", DefaultTimeout, "Page load timeout in seconds")

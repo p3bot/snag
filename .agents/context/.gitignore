@@ -1,0 +1,11 @@
+# Ignore subdirectories (cloned repos)
+*/
+
+# Include directories and specific files
+!cli/
+!docs/
+
+# Include specific subdirectories
+!.vscode/
+!scripts/
+!indexes/

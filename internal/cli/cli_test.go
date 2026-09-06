@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -1123,6 +1124,70 @@ func TestBrowser_DefaultTimeout(t *testing.T) {
 	_ = output
 }
 
+// TestBrowser_HeadlessUsesRealChromeIdentity checks that a launched headless
+// session is not Rod's default Mac Chrome 114 device and does not advertise
+// HeadlessChrome or navigator.webdriver.
+func TestBrowser_HeadlessUsesRealChromeIdentity(t *testing.T) {
+	if !isBrowserAvailable() {
+		t.Skip("Browser not available, skipping browser integration test")
+	}
+
+	server := startTestServer(t)
+	url := server.URL + "/fingerprint.html"
+
+	stdout, _, err := runSnag("--force-headless", "--format", "html", url)
+
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+
+	if strings.Contains(stdout, `"webdriver":true`) {
+		t.Error("navigator.webdriver is true")
+	}
+	if !strings.Contains(stdout, `"webdriver":false`) {
+		t.Errorf("expected webdriver false in page, got:\n%s", stdout)
+	}
+	if strings.Contains(stdout, `"headlessChrome":true`) {
+		t.Error("user agent contains HeadlessChrome")
+	}
+	if strings.Contains(stdout, `"headlessBrand":true`) {
+		t.Error("UA-CH brands still include HeadlessChrome")
+	}
+	if strings.Contains(stdout, `"rodLaptop":true`) {
+		t.Error("Rod LaptopWithMDPIScreen user agent still applied")
+	}
+	if strings.Contains(stdout, "Chrome/114.0.0.0") {
+		t.Error("stale Chrome/114 user agent still applied")
+	}
+	if strings.Contains(stdout, `"innerExceedsScreen":true`) {
+		t.Error("inner viewport is larger than screen")
+	}
+	if strings.Contains(stdout, `"outerNative":false`) {
+		t.Error("window.outerWidth getter is not native (JS spoof)")
+	}
+	if strings.Contains(stdout, `"screenOwn":true`) {
+		t.Error("screen.width is an own getter (JS spoof)")
+	}
+	// Chromium headless=new reports outerWidth/outerHeight as 0 (outerZero,
+	// innerExceedsOuter) and may expose outerWidth as an own native getter.
+	// snag does not patch that in page JS.
+	// --window-size and --screen-info 1920x1080 (not Chromium headless 800x600).
+	for _, got := range []string{`"inner":[800,600]`, `"outer":[800,600]`, `"screen":[800,600]`} {
+		if strings.Contains(stdout, got) {
+			t.Errorf("headless geometry still Chromium default %s, got:\n%s", got, stdout)
+		}
+	}
+	switch runtime.GOOS {
+	case "linux":
+		if !strings.Contains(stdout, "Linux") {
+			t.Errorf("expected host Linux in user agent, got:\n%s", stdout)
+		}
+	case "darwin":
+		if !strings.Contains(stdout, "Mac") {
+			t.Errorf("expected host Mac in user agent, got:\n%s", stdout)
+		}
+	}
+}
+
 // TestBrowser_CustomUserAgent tests --user-agent flag
 func TestBrowser_CustomUserAgent(t *testing.T) {
 	if !isBrowserAvailable() {
@@ -1130,20 +1195,20 @@ func TestBrowser_CustomUserAgent(t *testing.T) {
 	}
 
 	server := startTestServer(t)
-	url := server.URL + "/simple.html"
+	url := server.URL + "/fingerprint.html"
 
 	customUA := "Mozilla/5.0 (Custom Bot) snag/test"
-	stdout, stderr, err := runSnag("--user-agent", customUA, url)
+	stdout, _, err := runSnag("--force-headless", "--format", "html", "--user-agent", customUA, url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
 
-	// Should successfully fetch content with custom user agent
-	assertContains(t, stdout, "# Example Heading")
-
-	// User agent is set in browser, content should be fetched normally
-	output := stderr
-	_ = output
+	if !strings.Contains(stdout, `"userAgent":"`+customUA+`"`) {
+		t.Errorf("expected custom user agent %q in page, got:\n%s", customUA, stdout)
+	}
+	if strings.Contains(stdout, `"headlessBrand":true`) {
+		t.Error("UA-CH brands still include HeadlessChrome with custom user agent")
+	}
 }
 
 // TestBrowser_CloseTab tests --close-tab flag

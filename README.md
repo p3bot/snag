@@ -536,7 +536,7 @@ The dedicated profile approach gives you persistence without risking your main C
 
 ### Custom User Agent
 
-Bypass headless detection or mimic specific browsers:
+Override the browser user agent (default is the real Chrome UA for this host):
 
 ```bash
 # Linux Firefox user agent
@@ -737,7 +737,7 @@ snag --skill-uninstall
 ### Request Control
 
 ```
---user-agent <string>      Custom user agent string (bypass headless detection)
+--user-agent <string>      Override the browser user agent
 ```
 
 ## Troubleshooting

@@ -13,9 +13,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/launcher"
 
 	"github.com/p3bot/snag/internal/logger"
 )
@@ -326,6 +328,239 @@ func TestResolveWSURL_MissingURL(t *testing.T) {
 	_, err = resolveWSURL(context.Background(), ln.Addr().(*net.TCPAddr).Port)
 	if err == nil {
 		t.Fatal("expected error when webSocketDebuggerUrl is empty")
+	}
+}
+
+func TestDesktopChromeUA(t *testing.T) {
+	in := "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36"
+	want := "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
+	if got := desktopChromeUA(in); got != want {
+		t.Fatalf("desktopChromeUA() = %q, want %q", got, want)
+	}
+	plain := "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
+	if got := desktopChromeUA(plain); got != plain {
+		t.Fatalf("desktopChromeUA() changed a headed UA: %q", got)
+	}
+}
+
+func TestClientHintBrand(t *testing.T) {
+	tests := []struct {
+		name, want string
+	}{
+		{"Chrome", "Google Chrome"},
+		{"Edge", "Microsoft Edge"},
+		{"Brave", "Brave"},
+		{"Chromium", "Chromium"},
+		{"Ungoogled-Chromium", "Chromium"},
+		{"", "Chromium"},
+		{"Vivaldi", "Vivaldi"},
+	}
+	for _, tt := range tests {
+		if got := clientHintBrand(tt.name); got != tt.want {
+			t.Errorf("clientHintBrand(%q) = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestRewriteClientHintBrands(t *testing.T) {
+	in := []uaBrandJSON{
+		{Brand: "Not:A-Brand", Version: "99"},
+		{Brand: "Chromium", Version: "152"},
+		{Brand: "HeadlessChrome", Version: "152"},
+	}
+	got := rewriteClientHintBrands(in, "Brave")
+	if len(got) != 3 {
+		t.Fatalf("len = %d, want 3", len(got))
+	}
+	if got[1].Brand != "Chromium" {
+		t.Fatalf("Chromium brand rewritten: %q", got[1].Brand)
+	}
+	if got[2].Brand != "Brave" {
+		t.Fatalf("HeadlessChrome brand = %q, want Brave", got[2].Brand)
+	}
+	if got[2].Version != "152" {
+		t.Fatalf("version = %q, want 152", got[2].Version)
+	}
+
+	headed := []uaBrandJSON{
+		{Brand: "Not:A-Brand", Version: "99"},
+		{Brand: "Chromium", Version: "152"},
+		{Brand: "Google Chrome", Version: "152"},
+	}
+	got = rewriteClientHintBrands(headed, "Brave")
+	if got[2].Brand != "Google Chrome" {
+		t.Fatalf("headed brand rewritten: %q", got[2].Brand)
+	}
+	if len(got) != 3 {
+		t.Fatalf("headed list grew: len = %d", len(got))
+	}
+
+	chromium := []uaBrandJSON{
+		{Brand: "Not:A-Brand", Version: "99"},
+		{Brand: "Chromium", Version: "152"},
+		{Brand: "HeadlessChrome", Version: "152"},
+	}
+	got = rewriteClientHintBrands(chromium, "Chromium")
+	if len(got) != 2 {
+		t.Fatalf("Chromium brands len = %d, want 2 (no duplicate)", len(got))
+	}
+	if got[0].Brand != "Not:A-Brand" || got[1].Brand != "Chromium" {
+		t.Fatalf("Chromium brands = %+v", got)
+	}
+}
+
+func TestUserAgentOverride_NoHeadless(t *testing.T) {
+	got := userAgentOverride(pageUAInfo{
+		UA: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+	}, "Chrome")
+	if got != nil {
+		t.Fatalf("headed UA produced override: %+v", got)
+	}
+}
+
+func TestUserAgentOverride_WithoutHighEntropy(t *testing.T) {
+	in := pageUAInfo{
+		UA:       "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+		Platform: "Linux x86_64",
+		Brands:   []uaBrandJSON{{Brand: "HeadlessChrome", Version: "152"}},
+	}
+	got := userAgentOverride(in, "Chrome")
+	if got == nil {
+		t.Fatal("expected UA rewrite")
+	}
+	wantUA := "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
+	if got.UserAgent != wantUA {
+		t.Fatalf("UserAgent = %q, want %q", got.UserAgent, wantUA)
+	}
+	if got.Platform != "Linux x86_64" {
+		t.Fatalf("Platform = %q", got.Platform)
+	}
+	if got.UserAgentMetadata != nil {
+		t.Fatalf("blank Client Hints attached: %+v", got.UserAgentMetadata)
+	}
+}
+
+func TestUserAgentOverride_CustomUAHeadlessBrand(t *testing.T) {
+	in := pageUAInfo{
+		UA:           "Mozilla/5.0 (Custom Bot) snag/test",
+		Platform:     "Linux x86_64",
+		HighEntropy:  true,
+		Architecture: "x86",
+		Bitness:      "64",
+		UAPlatform:   "Linux",
+		Brands: []uaBrandJSON{
+			{Brand: "Not:A-Brand", Version: "99"},
+			{Brand: "Chromium", Version: "152"},
+			{Brand: "HeadlessChrome", Version: "152"},
+		},
+		FullVersionList: []uaBrandJSON{
+			{Brand: "HeadlessChrome", Version: "152.0.7339.80"},
+		},
+	}
+	got := userAgentOverride(in, "Chrome")
+	if got == nil || got.UserAgentMetadata == nil {
+		t.Fatal("expected Client Hints rewrite for custom UA")
+	}
+	if got.UserAgent != in.UA {
+		t.Fatalf("custom UA rewritten: %q", got.UserAgent)
+	}
+	if got.UserAgentMetadata.Brands[2].Brand != "Google Chrome" {
+		t.Fatalf("brands = %+v", got.UserAgentMetadata.Brands)
+	}
+
+	in.HighEntropy = false
+	if userAgentOverride(in, "Chrome") != nil {
+		t.Fatal("custom UA without high entropy should not override")
+	}
+}
+
+func TestUserAgentOverride_WithHighEntropy(t *testing.T) {
+	in := pageUAInfo{
+		UA:              "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+		Platform:        "Linux x86_64",
+		HighEntropy:     true,
+		Architecture:    "x86",
+		Bitness:         "64",
+		UAPlatform:      "Linux",
+		PlatformVersion: "6.16.0",
+		Brands: []uaBrandJSON{
+			{Brand: "Not:A-Brand", Version: "99"},
+			{Brand: "Chromium", Version: "152"},
+			{Brand: "HeadlessChrome", Version: "152"},
+		},
+		FullVersionList: []uaBrandJSON{
+			{Brand: "HeadlessChrome", Version: "152.0.7339.80"},
+		},
+	}
+	got := userAgentOverride(in, "Chrome")
+	if got == nil || got.UserAgentMetadata == nil {
+		t.Fatal("expected Client Hints with high-entropy data")
+	}
+	meta := got.UserAgentMetadata
+	if meta.Architecture != "x86" || meta.Bitness != "64" || meta.PlatformVersion != "6.16.0" {
+		t.Fatalf("high-entropy fields: %+v", meta)
+	}
+	if len(meta.Brands) != 3 || meta.Brands[2].Brand != "Google Chrome" {
+		t.Fatalf("brands = %+v", meta.Brands)
+	}
+	if len(meta.FullVersionList) != 1 || meta.FullVersionList[0].Brand != "Google Chrome" {
+		t.Fatalf("fullVersionList = %+v", meta.FullVersionList)
+	}
+}
+
+func TestUACHPlatform(t *testing.T) {
+	if got := uaCHPlatform(pageUAInfo{UAPlatform: "Linux"}); got != "Linux" {
+		t.Fatalf("explicit platform = %q", got)
+	}
+	if got := uaCHPlatform(pageUAInfo{UA: "Mozilla/5.0 (X11; Linux aarch64)"}); got != "Linux" {
+		t.Fatalf("UA Linux = %q", got)
+	}
+	if got := uaCHPlatform(pageUAInfo{UA: "Mozilla/5.0 (Windows NT 10.0)"}); got != "Windows" {
+		t.Fatalf("UA Windows = %q", got)
+	}
+	if got := uaCHPlatform(pageUAInfo{UA: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}); got != "macOS" {
+		t.Fatalf("UA Mac = %q", got)
+	}
+}
+
+func TestWithRealUserLaunchFlags_Headless(t *testing.T) {
+	args := strings.Join(withRealUserLaunchFlags(launcher.New(), true).FormatArgs(), " ")
+	if strings.Contains(args, "--enable-automation") {
+		t.Fatalf("headless launch still passes --enable-automation: %s", args)
+	}
+	if !strings.Contains(args, "--headless=new") {
+		t.Fatalf("headless launch missing --headless=new: %s", args)
+	}
+	if strings.Contains(args, "--headless ") || strings.HasSuffix(args, "--headless") {
+		t.Fatalf("headless launch still uses old --headless: %s", args)
+	}
+	if !strings.Contains(args, "--window-size=1920,1080") {
+		t.Fatalf("headless launch missing window size: %s", args)
+	}
+	if !strings.Contains(args, "--screen-info={1920x1080}") {
+		t.Fatalf("headless launch missing virtual screen: %s", args)
+	}
+	if !strings.Contains(args, "--disable-blink-features=AutomationControlled") {
+		t.Fatalf("headless launch missing AutomationControlled: %s", args)
+	}
+}
+
+func TestWithRealUserLaunchFlags_Visible(t *testing.T) {
+	args := strings.Join(withRealUserLaunchFlags(launcher.New(), false).FormatArgs(), " ")
+	if strings.Contains(args, "--enable-automation") {
+		t.Fatalf("visible launch still passes --enable-automation: %s", args)
+	}
+	if strings.Contains(args, "--headless") {
+		t.Fatalf("visible launch should not be headless: %s", args)
+	}
+	if strings.Contains(args, "--window-size=") {
+		t.Fatalf("visible launch should not force window size: %s", args)
+	}
+	if strings.Contains(args, "--screen-info=") {
+		t.Fatalf("visible launch should not force virtual screen: %s", args)
+	}
+	if !strings.Contains(args, "--disable-blink-features=AutomationControlled") {
+		t.Fatalf("visible launch missing AutomationControlled: %s", args)
 	}
 }
 

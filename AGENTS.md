@@ -240,7 +240,7 @@ go test -v -cover ./...              # With coverage
 
 - `internal/browser` contains security comments about browser handling
 - Never bypass certificate validation in production
-- User agent customization available via `--user-agent` flag to bypass headless detection
+- User agent customization available via `--user-agent` flag; launched sessions use the real Chrome identity by default (no Rod device emulation, `--headless=new`)
 - Close tabs in headless mode by default (configurable with `--close-tab`)
 
 **Input Validation:**

@@ -31,7 +31,7 @@
 - [**`--help`** / **`-h`** - Show help](./help.md)
 - [**`--version`** / **`-v`** - Show version](./version.md)
 - [**`--all-tabs`** / **`-a`** - Process all open tabs](./all-tabs.md)
-- [**`--user-agent STRING`** - Custom user agent](./user-agent.md)
+- [**`--user-agent STRING`** - Override the browser user agent](./user-agent.md)
 - [**`--user-data-dir DIRECTORY`** - Custom browser profile](./user-data-dir.md)
 - [**`--skill` / `--skill-install` / `--skill-list` / `--skill-uninstall` / `--local`** - Agent skill print and install](./skill.md)
 
@@ -95,7 +95,7 @@
 
 | Flag           | Aliases | Type   | Default | Description              |
 | -------------- | ------- | ------ | ------- | ------------------------ |
-| `--user-agent` | -       | String | -       | Custom user agent string |
+| `--user-agent` | -       | String | -       | Override the browser user agent |
 
 ### Agent Skill Flags
 
@@ -238,7 +238,7 @@ These determine the primary operation mode:
 - ✅ `--close-tab` - Close after fetch
 - ✅ `--force-headless` - Browser mode
 - ✅ `--open-browser` - Open in visible browser
-- ✅ `--user-agent` - Custom UA
+- ✅ `--user-agent` - Override the browser user agent
 - ✅ Logging flags
 
 **Incompatible Flags:**

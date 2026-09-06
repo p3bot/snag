@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fingerprint</title>
+</head>
+<body>
+<pre id="out"></pre>
+<script>
+var ua = navigator.userAgent;
+var brands = [];
+if (navigator.userAgentData && navigator.userAgentData.brands) {
+    for (var i = 0; i < navigator.userAgentData.brands.length; i++) {
+        brands.push(navigator.userAgentData.brands[i].brand);
+    }
+}
+var out = {
+    userAgent: ua,
+    webdriver: navigator.webdriver,
+    platform: navigator.platform,
+    brands: brands,
+    headlessChrome: /HeadlessChrome/i.test(ua),
+    headlessBrand: brands.some(function (b) { return /HeadlessChrome/i.test(b); }),
+    rodLaptop: /Macintosh; Intel Mac OS X 10_15_7/.test(ua) && /Chrome\/114\.0\.0\.0/.test(ua),
+    inner: [window.innerWidth, window.innerHeight],
+    outer: [window.outerWidth, window.outerHeight],
+    screen: [screen.width, screen.height],
+    outerZero: window.outerWidth === 0,
+    innerExceedsOuter: window.innerWidth > window.outerWidth || window.innerHeight > window.outerHeight,
+    innerExceedsScreen: window.innerWidth > screen.width || window.innerHeight > screen.height,
+    outerOwn: Object.getOwnPropertyDescriptor(window, "outerWidth") !== undefined,
+    outerNative: (function () {
+        var d = Object.getOwnPropertyDescriptor(window, "outerWidth")
+            || Object.getOwnPropertyDescriptor(Window.prototype, "outerWidth");
+        return !!(d && d.get && /\[native code\]/.test(Function.prototype.toString.call(d.get)));
+    })(),
+    screenOwn: Object.getOwnPropertyDescriptor(screen, "width") !== undefined
+};
+document.getElementById("out").textContent = JSON.stringify(out);
+</script>
+</body>
+</html>
