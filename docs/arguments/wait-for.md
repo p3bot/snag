@@ -115,6 +115,7 @@ All output flags work normally with `--wait-for`:
 - `--verbose` / `--debug` - Logging levels
 - `--user-agent` - Set user agent for new pages (ignored for existing tabs)
 - `--user-data-dir` - Custom browser profile, wait for selector
+- `--temp-profile` - Ephemeral profile, wait for selector
 
 #### Examples
 

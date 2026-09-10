@@ -1,6 +1,6 @@
 # Validation Rules and Order
 
-**Last Updated:** 2026-08-30
+**Last Updated:** 2026-09-09
 
 This document describes the validation order and cross-cutting validation rules that apply to multiple arguments.
 
@@ -26,7 +26,7 @@ All string arguments are trimmed using `strings.TrimSpace()` after reading from 
 - Applies to most flags:
   - **String flags**: `--output`, `--output-dir`, `--format`, `--wait-for`, `--user-agent`, `--user-data-dir`, `--tab`, `--url-file`, `--color`
   - **Integer flags**: `--timeout`, `--port`
-  - **Boolean flags**: `--close-tab`, `--force-headless`, `--open-browser`, `--list-tabs`, `--all-tabs`
+  - **Boolean flags**: `--close-tab`, `--force-headless`, `--open-browser`, `--list-tabs`, `--all-tabs`, `--temp-profile`
 
 **Repeatable (not last-wins):**
 
@@ -36,7 +36,8 @@ All string arguments are trimmed using `strings.TrimSpace()` after reading from 
 
 - **Logging flags** (`--verbose`, `--debug`) are mutually exclusive
 - **Skill verbs** (`--skill`, `--skill-install`, `--skill-list`, `--skill-uninstall`) are mutually exclusive
-- Using multiple logging flags or multiple skill verbs together results in an error
+- **Profile flags** (`--user-data-dir`, `--temp-profile`) are mutually exclusive
+- Using multiple logging flags, multiple skill verbs, or both profile flags together results in an error
 
 **Examples:**
 
@@ -55,7 +56,7 @@ Certain flags override all others and exit immediately:
 1. `--help` (highest priority) → Display help, exit 0
 2. `--version` → Display version, exit 0
 3. Skill flags (`--skill`, `--skill-install`, `--skill-list`, `--skill-uninstall`) → skill mode, or usage-class error if combined with other operation modes
-4. `--list-tabs` → List tabs, exit 0, ignore all flags except `--port` and logging flags
+4. `--list-tabs` → List tabs, exit 0; `--port` and logging flags apply; `--user-data-dir` / `--temp-profile` warn then are ignored
 
 ---
 
@@ -68,26 +69,30 @@ Certain flags override all others and exit immediately:
 3. Validate `--color` (`auto`, `always`, `never`), resolve stderr colour, and install the logger (`PersistentPreRunE`)
 4. Cobra validates logging flags are mutually exclusive (`--verbose`, `--debug`)
 5. Cobra validates skill verbs are mutually exclusive (`--skill`, `--skill-install`, `--skill-list`, `--skill-uninstall`)
-6. Handle `--version` → exit early (wins over doctor, skill, url-file, and all other flags)
-7. Handle skill flags → print/install/list/uninstall, or usage-class error with other operation modes / URL positionals
-8. Handle `--doctor` → exit early
-9. Handle `--open-browser` without URL → exit early
-10. Handle `--list-tabs` → extract `--port` and logging flags, ignore all others, list tabs, exit early
-11. Handle `--all-tabs` → check for URL conflict, exit early
-12. Handle `--tab` → check for URL conflict, exit early
-13. Validate URL argument required (if not in special modes above)
-14. Validate URL format
-15. Validate `-o` + `-d` conflict
-16. Validate format
-17. Validate timeout
-18. Validate port
-19. Validate output path (if `-o`)
-20. Validate output directory (if `-d`)
-21. Execute fetch operation
+6. Cobra validates profile flags are mutually exclusive (`--user-data-dir`, `--temp-profile`)
+7. Handle `--version` → exit early (wins over doctor, skill, url-file, and all other flags)
+8. Handle skill flags → print/install/list/uninstall, or usage-class error with other operation modes / URL positionals
+9. Handle `--doctor` → exit early
+10. Handle `--kill-browser` → exit early (errors if combined with URL, tab, list, or open-browser)
+11. Handle `--list-tabs` → extract `--port` and logging flags; profile flags warn then are ignored; list tabs, exit early
+12. Validate flag combinations (content-source conflicts, `--force-headless` vs `--open-browser` / tabs, `-o` + `-d`, `--info` conflicts)
+13. Handle `--info` → single URL or `--tab`, then exit
+14. Handle `--all-tabs` → check for URL conflict (already validated), process tabs, exit
+15. Handle `--tab` → check for URL conflict (already validated), fetch tab(s), exit
+16. Handle `--open-browser` without URL → exit early
+17. Validate URL argument required (if not in special modes above)
+18. Handle `--open-browser` with URLs → open tabs, no fetch
+19. Validate URL format
+20. Validate format
+21. Validate timeout
+22. Validate port
+23. Validate output path (if `-o`)
+24. Validate output directory (if `-d`)
+25. Execute fetch operation
 
 **Key Patterns:**
 
-- Early exits for standalone modes (help, version, skill, doctor, list-tabs, open-browser)
+- Early exits for standalone modes (help, version, skill, doctor, kill-browser, list-tabs, open-browser)
 - Content source validation before output validation
 - Mutually exclusive flag checks before individual flag validation
 - Path/filesystem validation happens last (just before operation)

@@ -11,6 +11,7 @@ import "errors"
 var (
 	ErrBrowserNotFound   = errors.New("no Chromium-based browser found")
 	ErrBrowserConnection = errors.New("failed to connect to browser")
+	ErrProfileInUse      = errors.New("launch profile is in use")
 	ErrNoBrowserRunning  = errors.New("no browser instance running with remote debugging")
 	ErrTabIndexInvalid   = errors.New("tab index out of range")
 	ErrNoTabMatch        = errors.New("no tab matches pattern")

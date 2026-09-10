@@ -31,6 +31,7 @@ func TestConfig_BrowserOptions(t *testing.T) {
 		OpenBrowser:   true,
 		UserAgent:     "Bot/1.0",
 		UserDataDir:   "/tmp/snag-profile",
+		TempProfile:   true,
 	}
 
 	opts := c.BrowserOptions()
@@ -48,6 +49,9 @@ func TestConfig_BrowserOptions(t *testing.T) {
 	}
 	if opts.UserDataDir != "/tmp/snag-profile" {
 		t.Errorf("UserDataDir = %q, want /tmp/snag-profile", opts.UserDataDir)
+	}
+	if !opts.TempProfile {
+		t.Error("TempProfile = false, want true")
 	}
 }
 

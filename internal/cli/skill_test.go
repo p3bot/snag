@@ -123,6 +123,7 @@ func resetCLIFlags() {
 	colorMode = logger.ColorAuto
 	userAgent = ""
 	userDataDir = ""
+	tempProfile = false
 	skillPrint = false
 	skillInstall = nil
 	skillList = false
@@ -135,7 +136,7 @@ func resetCLIFlags() {
 		fs.VisitAll(func(f *pflag.Flag) {
 			f.Changed = false
 			switch f.Name {
-			case "help", "version":
+			case "help", "version", "temp-profile":
 				_ = f.Value.Set("false")
 			}
 		})

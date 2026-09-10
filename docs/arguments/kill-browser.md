@@ -102,7 +102,8 @@ These flags are not applicable to killing browsers and are ignored:
 | `--kill-browser` + `--close-tab`      | Flag ignored, browser killed | Entire browser is being killed   |
 | `--kill-browser` + `--force-headless` | Flag ignored, browser killed | Kills existing browsers          |
 | `--kill-browser` + `--user-agent`     | Flag ignored, browser killed | No navigation performed          |
-| `--kill-browser` + `--user-data-dir`  | Flag ignored, browser killed | Kills existing browsers          |
+| `--kill-browser` + `--user-data-dir`  | Flag ignored, browser killed | Does not wipe the persistent snag profile |
+| `--kill-browser` + `--temp-profile`   | Flag ignored, browser killed | Does not wipe profiles                    |
 
 **Rationale:**
 

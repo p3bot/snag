@@ -111,6 +111,7 @@
 | `--all-tabs` + `--close-tab`     | Works normally       | Close each tab after fetching; last tab closes browser                                          |
 | `--all-tabs` + `--user-agent`    | **Warning**, ignored | `"Warning: --user-agent is ignored with --all-tabs (cannot change existing tabs' user agents)"` |
 | `--all-tabs` + `--user-data-dir` | **Warning**, ignored | `"Warning: --user-data-dir ignored when connecting to existing browser"`                        |
+| `--all-tabs` + `--temp-profile`  | **Warning**, ignored | `"Warning: --temp-profile ignored when connecting to existing browser"`                         |
 
 **Logging Flags (All Work Normally):**
 

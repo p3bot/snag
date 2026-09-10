@@ -50,8 +50,13 @@ snag --doctor                # environment diagnostics
 
 ## Authenticated Page
 
+Launched browsers share one persistent profile: `$XDG_STATE_HOME/snag/chrome` on Linux (default `~/.local/state/snag/chrome`; relative or empty `XDG_STATE_HOME` is ignored) or `~/Library/Application Support/snag/chrome` on macOS. Log in, quit, then headless `snag <url>` keeps the cookies. Leave the window open and same-port `snag <url>` attaches via CDP.
+
+The default profile is a singleton (Chrome profile lock). Extra instances use `--temp-profile` or `--user-data-dir PATH`. Those two flags are mutually exclusive. `--force-headless` on another port still uses the default profile unless one of those isolation flags is set.
+
 ```
-snag --open-browser          # User must log in in that window; leave it open
-snag <url>                   # Reuse that session
+snag --open-browser          # Log in; quit or leave open
+snag <url>                   # Same profile after quit; CDP if left open
 snag -t "pattern"
+snag --temp-profile <url>    # Ephemeral; headless close deletes it
 ```

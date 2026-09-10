@@ -129,6 +129,7 @@ All these flags work normally with `-d`:
 - ✅ `--verbose` / `--debug` - Logging levels
 - ✅ `--user-agent` - Custom user agent (applies to all new pages)
 - ✅ `--user-data-dir` - Custom browser profile
+- ✅ `--temp-profile` - Ephemeral launch profile
 - ✅ `--port` - Remote debugging port
 
 #### Examples

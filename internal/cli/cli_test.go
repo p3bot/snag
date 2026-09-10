@@ -154,16 +154,58 @@ func startTestServer(t *testing.T) *httptest.Server {
 	return server
 }
 
-// runSnag executes the snag binary with the given arguments
-// Returns stdout, stderr, and error
+// runSnag executes the snag binary with the given arguments.
 func runSnag(args ...string) (stdout string, stderr string, err error) {
+	return runSnagCmd(nil, args...)
+}
+
+// runSnagLaunch is for tests that start a browser. It adds --temp-profile so
+// they do not write the developer's XDG state dir.
+func runSnagLaunch(args ...string) (stdout string, stderr string, err error) {
+	return runSnag(withTempProfile(args)...)
+}
+
+func runSnagCmd(env []string, args ...string) (stdout string, stderr string, err error) {
 	cmd := exec.Command(snagBin, args...)
 	cmd.Dir = testutil.ModuleRoot()
+	if env != nil {
+		cmd.Env = env
+	}
 
-	// Capture stdout and stderr separately
 	stdoutBytes, stderrBytes, err := runCommand(cmd)
-
 	return string(stdoutBytes), string(stderrBytes), err
+}
+
+func withTempProfile(args []string) []string {
+	for _, a := range args {
+		name, _, _ := strings.Cut(a, "=")
+		if name == "--temp-profile" || name == "--user-data-dir" {
+			return args
+		}
+	}
+	return append([]string{"--temp-profile"}, args...)
+}
+
+func testEnv(kv map[string]string, unset ...string) []string {
+	skip := make(map[string]bool, len(kv)+len(unset))
+	for _, k := range unset {
+		skip[k] = true
+	}
+	for k := range kv {
+		skip[k] = true
+	}
+	out := make([]string, 0, len(os.Environ())+len(kv))
+	for _, e := range os.Environ() {
+		name, _, _ := strings.Cut(e, "=")
+		if skip[name] {
+			continue
+		}
+		out = append(out, e)
+	}
+	for k, v := range kv {
+		out = append(out, k+"="+v)
+	}
+	return out
 }
 
 // runCommand executes a command and returns stdout, stderr separately
@@ -639,7 +681,7 @@ func TestCLI_FormatOptions(t *testing.T) {
 			// We can't actually test fetching without a browser,
 			// but we can verify the format is accepted by checking
 			// the error message doesn't mention invalid format
-			stdout, stderr, err := runSnag("--format", format, "--force-headless", "https://example.com")
+			stdout, stderr, err := runSnagLaunch("--format", format, "--force-headless", "https://example.com")
 
 			output := stdout + stderr
 
@@ -690,7 +732,7 @@ func TestCLI_OutputFilePermission(t *testing.T) {
 	})
 
 	outputPath := filepath.Join(readOnlyDir, "test-output.md")
-	stdout, stderr, err := runSnag("-o", outputPath, "--force-headless", "https://example.com")
+	stdout, stderr, err := runSnagLaunch("-o", outputPath, "--force-headless", "https://example.com")
 
 	// Should fail due to permissions
 	assertError(t, err)
@@ -714,7 +756,7 @@ func TestBrowser_FetchSimpleHTML(t *testing.T) {
 	server := startTestServer(t)
 	url := server.URL + "/simple.html"
 
-	stdout, stderr, err := runSnag(url)
+	stdout, stderr, err := runSnagLaunch(url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -743,7 +785,7 @@ func TestBrowser_FetchComplexHTML(t *testing.T) {
 	server := startTestServer(t)
 	url := server.URL + "/complex.html"
 
-	stdout, stderr, err := runSnag(url)
+	stdout, stderr, err := runSnagLaunch(url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -784,7 +826,7 @@ func TestBrowser_FetchMinimalHTML(t *testing.T) {
 	server := startTestServer(t)
 	url := server.URL + "/minimal.html"
 
-	stdout, stderr, err := runSnag(url)
+	stdout, stderr, err := runSnagLaunch(url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -812,7 +854,7 @@ func TestBrowser_HTMLFormat(t *testing.T) {
 	server := startTestServer(t)
 	url := server.URL + "/simple.html"
 
-	stdout, stderr, err := runSnag("--format", "html", url)
+	stdout, stderr, err := runSnagLaunch("--format", "html", url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -857,7 +899,7 @@ func TestBrowser_OutputToFile(t *testing.T) {
 		os.Remove(outputPath)
 	})
 
-	stdout, stderr, err := runSnag("-o", outputPath, url)
+	stdout, stderr, err := runSnagLaunch("-o", outputPath, url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -894,7 +936,7 @@ func TestBrowser_ForceHeadless(t *testing.T) {
 	server := startTestServer(t)
 	url := server.URL + "/simple.html"
 
-	stdout, stderr, err := runSnag("--force-headless", url)
+	stdout, stderr, err := runSnagLaunch("--force-headless", url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -917,7 +959,7 @@ func TestBrowser_CustomPort(t *testing.T) {
 	url := server.URL + "/simple.html"
 
 	// Use a non-default port
-	stdout, stderr, err := runSnag("--port", "9223", "--force-headless", url)
+	stdout, stderr, err := runSnagLaunch("--port", "9223", "--force-headless", url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -946,7 +988,7 @@ func TestBrowser_Auth401Detection(t *testing.T) {
 
 	url := server.URL
 
-	stdout, stderr, err := runSnag(url)
+	stdout, stderr, err := runSnagLaunch(url)
 
 	// May fail or succeed depending on how snag handles 401
 	// At minimum, should not crash
@@ -974,7 +1016,7 @@ func TestBrowser_Auth403Detection(t *testing.T) {
 
 	url := server.URL
 
-	stdout, stderr, err := runSnag(url)
+	stdout, stderr, err := runSnagLaunch(url)
 
 	// May fail or succeed depending on how snag handles 403
 	// At minimum, should not crash
@@ -994,7 +1036,7 @@ func TestBrowser_LoginFormDetection(t *testing.T) {
 	server := startTestServer(t)
 	url := server.URL + "/login-form.html"
 
-	stdout, stderr, err := runSnag(url)
+	stdout, stderr, err := runSnagLaunch(url)
 
 	// Should successfully fetch the login form page
 	assertNoError(t, err)
@@ -1018,7 +1060,7 @@ func TestBrowser_NoAuthFalsePositives(t *testing.T) {
 	server := startTestServer(t)
 	url := server.URL + "/simple.html"
 
-	stdout, stderr, err := runSnag(url)
+	stdout, stderr, err := runSnagLaunch(url)
 
 	// Regular page should fetch successfully
 	assertNoError(t, err)
@@ -1044,7 +1086,7 @@ func TestBrowser_CustomTimeout(t *testing.T) {
 	url := server.URL + "/simple.html"
 
 	// Use a custom timeout (60 seconds)
-	stdout, stderr, err := runSnag("--timeout", "60", url)
+	stdout, stderr, err := runSnagLaunch("--timeout", "60", url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1066,7 +1108,7 @@ func TestBrowser_WaitForSelector(t *testing.T) {
 	url := server.URL + "/dynamic.html"
 
 	// Wait for the delayed content element
-	stdout, stderr, err := runSnag("--wait-for", "#delayed-content", "--timeout", "5", url)
+	stdout, stderr, err := runSnagLaunch("--wait-for", "#delayed-content", "--timeout", "5", url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1089,7 +1131,7 @@ func TestBrowser_WaitForTimeout(t *testing.T) {
 	url := server.URL + "/simple.html"
 
 	// Wait for element that doesn't exist, with short timeout
-	stdout, stderr, err := runSnag("--wait-for", "#nonexistent-element", "--timeout", "2", url)
+	stdout, stderr, err := runSnagLaunch("--wait-for", "#nonexistent-element", "--timeout", "2", url)
 
 	// Should timeout and fail
 	assertError(t, err)
@@ -1112,7 +1154,7 @@ func TestBrowser_DefaultTimeout(t *testing.T) {
 	url := server.URL + "/simple.html"
 
 	// No timeout specified, should use default (30 seconds)
-	stdout, stderr, err := runSnag(url)
+	stdout, stderr, err := runSnagLaunch(url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1135,7 +1177,7 @@ func TestBrowser_HeadlessUsesRealChromeIdentity(t *testing.T) {
 	server := startTestServer(t)
 	url := server.URL + "/fingerprint.html"
 
-	stdout, _, err := runSnag("--force-headless", "--format", "html", url)
+	stdout, _, err := runSnagLaunch("--force-headless", "--format", "html", url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1198,7 +1240,7 @@ func TestBrowser_CustomUserAgent(t *testing.T) {
 	url := server.URL + "/fingerprint.html"
 
 	customUA := "Mozilla/5.0 (Custom Bot) snag/test"
-	stdout, _, err := runSnag("--force-headless", "--format", "html", "--user-agent", customUA, url)
+	stdout, _, err := runSnagLaunch("--force-headless", "--format", "html", "--user-agent", customUA, url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1221,7 +1263,7 @@ func TestBrowser_CloseTab(t *testing.T) {
 	url := server.URL + "/simple.html"
 
 	// Use --close-tab with headless mode
-	stdout, stderr, err := runSnag("--close-tab", "--force-headless", url)
+	stdout, stderr, err := runSnagLaunch("--close-tab", "--force-headless", url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1242,7 +1284,7 @@ func TestBrowser_VerboseOutput(t *testing.T) {
 	server := startTestServer(t)
 	url := server.URL + "/simple.html"
 
-	stdout, stderr, err := runSnag("--verbose", url)
+	stdout, stderr, err := runSnagLaunch("--verbose", url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1264,7 +1306,7 @@ func TestBrowser_DefaultSilentProgress(t *testing.T) {
 	server := startTestServer(t)
 	url := server.URL + "/simple.html"
 
-	stdout, stderr, err := runSnag(url)
+	stdout, stderr, err := runSnagLaunch(url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1308,7 +1350,7 @@ func TestBrowser_InfoJSON(t *testing.T) {
 	server := startTestServer(t)
 	url := server.URL + "/simple.html"
 
-	stdout, stderr, err := runSnag("--info", url)
+	stdout, stderr, err := runSnagLaunch("--info", url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1341,7 +1383,7 @@ func TestBrowser_InfoWarningsAndSave(t *testing.T) {
 	url := server.URL + "/simple.html"
 	outputPath := filepath.Join(t.TempDir(), "info.json")
 
-	stdout, stderr, err := runSnag("--info", "--force-headless", "--close-tab", "-o", outputPath, url)
+	stdout, stderr, err := runSnagLaunch("--info", "--force-headless", "--close-tab", "-o", outputPath, url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1370,7 +1412,7 @@ func TestBrowser_DebugMode(t *testing.T) {
 	server := startTestServer(t)
 	url := server.URL + "/simple.html"
 
-	stdout, stderr, err := runSnag("--debug", url)
+	stdout, stderr, err := runSnagLaunch("--debug", url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1395,7 +1437,7 @@ func TestBrowser_RealWorld_ExampleDotCom(t *testing.T) {
 		t.Skip("skipping real-world test in short mode")
 	}
 
-	stdout, stderr, err := runSnag("https://example.com")
+	stdout, stderr, err := runSnagLaunch("https://example.com")
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1427,7 +1469,7 @@ func TestBrowser_RealWorld_HttpBin(t *testing.T) {
 	}
 
 	// Test httpbin.org/html endpoint
-	stdout, stderr, err := runSnag("https://httpbin.org/html")
+	stdout, stderr, err := runSnagLaunch("https://httpbin.org/html")
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1454,7 +1496,7 @@ func TestBrowser_RealWorld_DelayedResponse(t *testing.T) {
 
 	// httpbin.org/delay/2 delays response by 2 seconds
 	// Using increased timeout to handle network latency
-	stdout, stderr, err := runSnag("--timeout", "30", "https://httpbin.org/delay/2")
+	stdout, stderr, err := runSnagLaunch("--timeout", "30", "https://httpbin.org/delay/2")
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1477,7 +1519,7 @@ func TestBrowser_ListTabs(t *testing.T) {
 	cleanupOrphanedBrowsers()
 
 	// First, open a browser with a visible tab
-	stdout1, stderr1, err1 := runSnag("--open-browser", "https://example.com")
+	stdout1, stderr1, err1 := runSnagLaunch("--open-browser", "https://example.com")
 	assertNoError(t, err1)
 	assertExitCode(t, err1, 0)
 
@@ -1543,7 +1585,7 @@ func TestCLI_TabInvalidIndex(t *testing.T) {
 	cleanupOrphanedBrowsers()
 
 	// First, open a browser
-	_, _, err1 := runSnag("--open-browser", "https://example.com")
+	_, _, err1 := runSnagLaunch("--open-browser", "https://example.com")
 	assertNoError(t, err1)
 
 	// Try to use --tab with non-numeric value (now treated as pattern in Phase 2.3)
@@ -1568,7 +1610,7 @@ func TestBrowser_TabOutOfRange(t *testing.T) {
 	cleanupOrphanedBrowsers()
 
 	// First, open a browser
-	_, _, err1 := runSnag("--open-browser", "https://example.com")
+	_, _, err1 := runSnagLaunch("--open-browser", "https://example.com")
 	assertNoError(t, err1)
 
 	// Try to fetch from tab index 999 (out of range)
@@ -1593,7 +1635,7 @@ func TestBrowser_TabNoMatch(t *testing.T) {
 	cleanupOrphanedBrowsers()
 
 	// First, open a browser
-	_, _, err1 := runSnag("--open-browser", "https://example.com")
+	_, _, err1 := runSnagLaunch("--open-browser", "https://example.com")
 	assertNoError(t, err1)
 
 	// Try to fetch from tab with non-matching pattern
@@ -1621,7 +1663,7 @@ func TestBrowser_TextFormat(t *testing.T) {
 	server := startTestServer(t)
 	url := server.URL + "/simple.html"
 
-	stdout, stderr, err := runSnag("--format", "text", url)
+	stdout, stderr, err := runSnagLaunch("--format", "text", url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1666,7 +1708,7 @@ func TestBrowser_PDFFormat(t *testing.T) {
 		os.Remove(outputPath)
 	})
 
-	stdout, stderr, err := runSnag("--format", "pdf", "-o", outputPath, url)
+	stdout, stderr, err := runSnagLaunch("--format", "pdf", "-o", outputPath, url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1751,7 +1793,7 @@ func TestBrowser_PNGFormat(t *testing.T) {
 		os.Remove(outputPath)
 	})
 
-	stdout, stderr, err := runSnag("--format", "png", "-o", outputPath, url)
+	stdout, stderr, err := runSnagLaunch("--format", "png", "-o", outputPath, url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1792,7 +1834,7 @@ func TestBrowser_OutputDir(t *testing.T) {
 	// Create temporary directory
 	tmpDir := t.TempDir()
 
-	stdout, stderr, err := runSnag("-d", tmpDir, url)
+	stdout, stderr, err := runSnagLaunch("-d", tmpDir, url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1849,7 +1891,7 @@ func TestBrowser_OutputDirPDF(t *testing.T) {
 	// Create temporary directory
 	tmpDir := t.TempDir()
 
-	stdout, stderr, err := runSnag("-d", tmpDir, "--format", "pdf", url)
+	stdout, stderr, err := runSnagLaunch("-d", tmpDir, "--format", "pdf", url)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -1888,7 +1930,7 @@ func TestBrowser_OutputDirPDF(t *testing.T) {
 // TestCLI_MultipleURLs_FlagOrder tests that Cobra allows flags anywhere (improved UX)
 func TestCLI_MultipleURLs_FlagOrder(t *testing.T) {
 	tmpDir := t.TempDir()
-	stdout, stderr, err := runSnag("https://example.com", "--force-headless", "-d", tmpDir)
+	stdout, stderr, err := runSnagLaunch("https://example.com", "--force-headless", "-d", tmpDir)
 
 	// Cobra allows flags anywhere (more flexible than urfave/cli)
 	// This should now succeed instead of failing
@@ -1924,7 +1966,7 @@ func TestCLI_MultipleURLs_WithOutput(t *testing.T) {
 // TestCLI_MultipleURLs_WithCloseTab tests --close-tab works with multiple URLs
 func TestCLI_MultipleURLs_WithCloseTab(t *testing.T) {
 	tmpDir := t.TempDir()
-	stdout, stderr, err := runSnag("--verbose", "--force-headless", "--close-tab", "-d", tmpDir, "https://example.com", "https://go.dev")
+	stdout, stderr, err := runSnagLaunch("--verbose", "--force-headless", "--close-tab", "-d", tmpDir, "https://example.com", "https://go.dev")
 
 	// Should succeed - --close-tab is now supported with multiple URLs
 	assertNoError(t, err)
@@ -2060,7 +2102,7 @@ func TestBrowser_MultipleURLs_Inline(t *testing.T) {
 	// Create temporary directory for output
 	tmpDir := t.TempDir()
 
-	stdout, stderr, err := runSnag("--verbose", "--force-headless", "-d", tmpDir, url1, url2)
+	stdout, stderr, err := runSnagLaunch("--verbose", "--force-headless", "-d", tmpDir, url1, url2)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -2117,7 +2159,7 @@ func TestBrowser_MultipleURLs_FromFile(t *testing.T) {
 	// Create temporary directory for output
 	tmpDir := t.TempDir()
 
-	stdout, stderr, err := runSnag("--verbose", "--force-headless", "-d", tmpDir, "--url-file", tmpFile.Name())
+	stdout, stderr, err := runSnagLaunch("--verbose", "--force-headless", "-d", tmpDir, "--url-file", tmpFile.Name())
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -2164,7 +2206,7 @@ func TestBrowser_MultipleURLs_Combined(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Combine file (2 URLs) with inline (1 URL) = 3 total
-	stdout, stderr, err := runSnag("--verbose", "--force-headless", "-d", tmpDir, "--url-file", tmpFile.Name(), url3)
+	stdout, stderr, err := runSnagLaunch("--verbose", "--force-headless", "-d", tmpDir, "--url-file", tmpFile.Name(), url3)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -2211,7 +2253,7 @@ invalid url with spaces
 	// Create temporary directory for output
 	tmpDir := t.TempDir()
 
-	stdout, stderr, err := runSnag("--force-headless", "-d", tmpDir, "--url-file", tmpFile.Name())
+	stdout, stderr, err := runSnagLaunch("--force-headless", "-d", tmpDir, "--url-file", tmpFile.Name())
 
 	assertNoError(t, err) // Should succeed (2 valid URLs)
 	assertExitCode(t, err, 0)
@@ -2236,7 +2278,7 @@ func TestBrowser_MultipleURLs_WithFormat(t *testing.T) {
 	// Create temporary directory for output
 	tmpDir := t.TempDir()
 
-	stdout, stderr, err := runSnag("--force-headless", "-d", tmpDir, "--format", "html", url1, url2)
+	stdout, stderr, err := runSnagLaunch("--force-headless", "-d", tmpDir, "--format", "html", url1, url2)
 
 	assertNoError(t, err)
 	assertExitCode(t, err, 0)
@@ -2278,7 +2320,7 @@ func TestBrowser_URLFile_AutoHTTPS(t *testing.T) {
 
 	// Use testdata/urls-small.txt which has URLs without https://
 	// This will try to fetch https://example.com and https://httpbin.org/html (auto-prepended)
-	stdout, stderr, err := runSnag("--verbose", "--force-headless", "-d", tmpDir, "--url-file", "testdata/urls-small.txt")
+	stdout, stderr, err := runSnagLaunch("--verbose", "--force-headless", "-d", tmpDir, "--url-file", "testdata/urls-small.txt")
 
 	// May succeed or fail depending on network access
 	// Just verify the URLs were loaded from file
@@ -2307,7 +2349,7 @@ func TestBrowser_URLFile_Comprehensive(t *testing.T) {
 	// - Inline comments with # and //
 	// - Auto-prepending https://
 	// - URLs with paths and query parameters
-	stdout, stderr, err := runSnag("--force-headless", "-d", tmpDir, "--url-file", "testdata/urls.txt")
+	stdout, stderr, err := runSnagLaunch("--force-headless", "-d", tmpDir, "--url-file", "testdata/urls.txt")
 
 	// May succeed or fail depending on network access
 	// Verify the URLs were loaded (should have 7 valid URLs based on the file content)
@@ -2335,7 +2377,7 @@ func TestBrowser_URLFile_InvalidURLs_RealWorld(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Use testdata/urls-invalid.txt which has mix of valid and invalid URLs
-	stdout, stderr, err := runSnag("--force-headless", "-d", tmpDir, "--url-file", "testdata/urls-invalid.txt")
+	stdout, stderr, err := runSnagLaunch("--force-headless", "-d", tmpDir, "--url-file", "testdata/urls-invalid.txt")
 
 	// Should process valid URLs and warn about invalid ones
 	output := stderr + stdout
@@ -2348,6 +2390,181 @@ func TestBrowser_URLFile_InvalidURLs_RealWorld(t *testing.T) {
 	}
 
 	_ = err // May succeed or fail depending on network
+}
+
+func TestCLI_HelpDocumentsTempProfile(t *testing.T) {
+	stdout, stderr, _ := runSnag("--help")
+	output := stdout + stderr
+	assertContains(t, output, "--temp-profile")
+	assertContains(t, output, "--user-data-dir")
+}
+
+func TestCLI_TempProfileUserDataDirMutex(t *testing.T) {
+	stdout, stderr, err := runSnag("--temp-profile", "--user-data-dir", t.TempDir(), "https://example.com")
+	assertError(t, err)
+	assertExitCode(t, err, 1)
+	output := stdout + stderr
+	assertContains(t, output, "temp-profile")
+	assertContains(t, output, "user-data-dir")
+}
+
+func TestCLI_DoctorTempProfile(t *testing.T) {
+	stdout, stderr, err := runSnag("--doctor", "--temp-profile")
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+	assertContains(t, stdout, "snag Launch Profile")
+	assertContains(t, stdout, "ephemeral (--temp-profile)")
+	_ = stderr
+}
+
+func TestCLI_DoctorUserDataDirFile(t *testing.T) {
+	stdout, stderr, err := runSnag("--doctor", "--user-data-dir", "/etc/hosts")
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+	assertContains(t, stdout, "/etc/hosts")
+	assertContains(t, stdout, "✗")
+	info, statErr := os.Stat("/etc/hosts")
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	if info.IsDir() {
+		t.Fatal("/etc/hosts became a directory")
+	}
+	_ = stderr
+}
+
+func TestCLI_DoctorDoesNotCreateDefaultProfile(t *testing.T) {
+	home := t.TempDir()
+	env := testEnv(map[string]string{"HOME": home}, "XDG_STATE_HOME")
+	stdout, stderr, err := runSnagCmd(env, "--doctor")
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+	assertContains(t, stdout, "snag Launch Profile")
+	assertContains(t, stdout, "snag/chrome")
+
+	profile := filepath.Join(home, ".local", "state", "snag", "chrome")
+	if runtime.GOOS == "darwin" {
+		profile = filepath.Join(home, "Library", "Application Support", "snag", "chrome")
+	}
+	if _, err := os.Stat(profile); !os.IsNotExist(err) {
+		t.Fatalf("--doctor must not create %s", profile)
+	}
+	_ = stderr
+}
+
+func TestBrowser_PersistentDefaultProfile(t *testing.T) {
+	if !isBrowserAvailable() {
+		t.Skip("Browser not available, skipping browser integration test")
+	}
+
+	cleanupOrphanedBrowsers()
+
+	home := t.TempDir()
+	env := testEnv(map[string]string{"HOME": home}, "XDG_STATE_HOME")
+	profile := filepath.Join(home, ".local", "state", "snag", "chrome")
+	if runtime.GOOS == "darwin" {
+		profile = filepath.Join(home, "Library", "Application Support", "snag", "chrome")
+	}
+
+	server := startTestServer(t)
+	url := server.URL + "/simple.html"
+	port := "19551"
+
+	stdout, stderr, err := runSnagCmd(env, "--force-headless", "--port", port, "--verbose", url)
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+	assertContains(t, stdout, "Example Heading")
+	assertContains(t, stderr, profile)
+
+	if _, err := os.Stat(profile); err != nil {
+		t.Fatalf("expected persistent profile %s after launch: %v\nstderr=%s", profile, err, stderr)
+	}
+
+	_, _, killErr := runSnag("--kill-browser", "--port", port)
+	assertNoError(t, killErr)
+	if _, err := os.Stat(profile); err != nil {
+		t.Fatalf("--kill-browser must not remove %s: %v", profile, err)
+	}
+}
+
+func TestBrowser_EmptyUserDataDirFallsThroughToDefault(t *testing.T) {
+	if !isBrowserAvailable() {
+		t.Skip("Browser not available, skipping browser integration test")
+	}
+
+	cleanupOrphanedBrowsers()
+
+	home := t.TempDir()
+	env := testEnv(map[string]string{"HOME": home}, "XDG_STATE_HOME")
+	profile := filepath.Join(home, ".local", "state", "snag", "chrome")
+	if runtime.GOOS == "darwin" {
+		profile = filepath.Join(home, "Library", "Application Support", "snag", "chrome")
+	}
+
+	server := startTestServer(t)
+	url := server.URL + "/simple.html"
+	port := "19554"
+
+	stdout, stderr, err := runSnagCmd(env, "--user-data-dir", "", "--force-headless", "--port", port, "--verbose", url)
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+	assertContains(t, stdout, "Example Heading")
+	assertContains(t, stderr, "--user-data-dir is empty, using default profile")
+	assertContains(t, stderr, profile)
+
+	if _, err := os.Stat(profile); err != nil {
+		t.Fatalf("empty --user-data-dir should create default profile %s: %v\nstderr=%s", profile, err, stderr)
+	}
+}
+
+func TestBrowser_TempProfileDoesNotUseXDG(t *testing.T) {
+	if !isBrowserAvailable() {
+		t.Skip("Browser not available, skipping browser integration test")
+	}
+
+	cleanupOrphanedBrowsers()
+
+	home := t.TempDir()
+	env := testEnv(map[string]string{"HOME": home}, "XDG_STATE_HOME")
+	profile := filepath.Join(home, ".local", "state", "snag", "chrome")
+	if runtime.GOOS == "darwin" {
+		profile = filepath.Join(home, "Library", "Application Support", "snag", "chrome")
+	}
+
+	server := startTestServer(t)
+	url := server.URL + "/simple.html"
+
+	stdout, stderr, err := runSnagCmd(env, "--temp-profile", "--force-headless", "--port", "19552", "--verbose", url)
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+	assertContains(t, stdout, "Example Heading")
+	assertContains(t, stderr, "ephemeral")
+
+	if _, err := os.Stat(profile); !os.IsNotExist(err) {
+		t.Fatalf("--temp-profile must not create %s", profile)
+	}
+}
+
+func TestBrowser_UserDataDirOverride(t *testing.T) {
+	if !isBrowserAvailable() {
+		t.Skip("Browser not available, skipping browser integration test")
+	}
+
+	cleanupOrphanedBrowsers()
+
+	dir := t.TempDir()
+	server := startTestServer(t)
+	url := server.URL + "/simple.html"
+
+	stdout, stderr, err := runSnagLaunch("--user-data-dir", dir, "--force-headless", "--port", "19553", "--verbose", url)
+	assertNoError(t, err)
+	assertExitCode(t, err, 0)
+	assertContains(t, stdout, "Example Heading")
+	assertContains(t, stderr, dir)
+
+	if _, err := os.Stat(dir); err != nil {
+		t.Fatalf("user-data-dir %s missing after launch: %v", dir, err)
+	}
 }
 
 // min is a polyfill for compatibility with Go versions prior to 1.21

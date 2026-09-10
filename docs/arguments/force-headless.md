@@ -27,8 +27,8 @@
 
 **When Existing Browser Running:**
 
-- Default port (9222): Connection attempt fails with port conflict error
-- Custom port via `--port`: Works normally (launches new headless browser on custom port, ignoring existing browser)
+- Default port (9222): Launch fails (port in use). If the default snag profile is also locked, snag reports `launch profile is in use`
+- Custom port via `--port`: Launches a new headless browser on that port, still using the default snag profile unless `--temp-profile` or `--user-data-dir` is set. A visible snag browser holding that profile causes `launch profile is in use`
 
 **Browser Mode Conflicts:**
 
@@ -62,6 +62,7 @@
 | -------------------------------------- | -------------- | ------------------------------------------------ |
 | `--force-headless` + `--open-browser`  | **Error**      | Conflicting modes (open-browser implies visible) |
 | `--force-headless` + `--user-data-dir` | Works normally | Launch headless with custom profile              |
+| `--force-headless` + `--temp-profile`  | Works normally | Launch headless with an ephemeral profile        |
 
 **Other Flag Interactions:**
 
@@ -84,8 +85,9 @@
 # Force headless when browser might be open (silently ignored if none open)
 snag --force-headless https://example.com
 
-# Force headless with custom port (avoids conflict with existing browser)
-snag --force-headless --port 9223 https://example.com
+# Force headless with custom port (default profile is a singleton; isolate it)
+snag --force-headless --port 9223 --temp-profile https://example.com
+snag --force-headless --port 9223 --user-data-dir /tmp/snag-profile https://example.com
 
 # Force headless with custom profile
 snag --force-headless --user-data-dir /tmp/snag-profile https://example.com
@@ -140,11 +142,12 @@ snag --force-headless --force-headless https://example.com
 3. If set with `--close-tab` → Warning (redundant)
 4. If no existing browser running → Silently ignore (default is headless)
 5. If existing browser on default port → Let connection fail (port conflict)
-6. If existing browser + custom `--port` → Launch new headless on custom port
+6. If existing browser + custom `--port` → Launch new headless on custom port using the same resolved profile as any other unspecified launch (XDG/darwin default unless `--temp-profile` or `--user-data-dir` is set). If Chrome still holds `SingletonLock` after launch fails, snag reports `launch profile is in use` and suggests `snag --temp-profile --force-headless --port <port> <url>`.
 
 **Error Messages:**
 
 - Tab operation conflicts: `"Cannot use --force-headless with --tab (--tab requires existing browser connection)"`
+- Profile already locked: `"Launch profile is in use by another Chrome process"` with `Try: snag --temp-profile --force-headless --port 9223 <url>` (uses the requested port when it is not 9222)
 
 **Warning Messages:**
 

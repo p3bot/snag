@@ -115,6 +115,7 @@ All browser mode flags work normally with `--timeout`:
 | `--timeout` + `--close-tab`      | Works normally |
 | `--timeout` + `--port`           | Works normally |
 | `--timeout` + `--user-data-dir`  | Works normally |
+| `--timeout` + `--temp-profile`   | Works normally |
 
 **Logging Flags:**
 

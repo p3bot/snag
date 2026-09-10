@@ -8,6 +8,7 @@ package validate
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -422,6 +423,60 @@ func TestValidateWaitFor(t *testing.T) {
 				t.Errorf("WaitFor(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestExpandHome(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ExpandHome("  ~/snag-profile  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, "snag-profile")
+	if got != want {
+		t.Errorf("ExpandHome(~/...) = %q, want %q", got, want)
+	}
+
+	got, err = ExpandHome("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "" {
+		t.Errorf("ExpandHome empty = %q, want empty", got)
+	}
+
+	got, err = ExpandHome("   ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "" {
+		t.Errorf("ExpandHome whitespace = %q, want empty", got)
+	}
+
+	got, err = ExpandHome("/abs/path")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "/abs/path" {
+		t.Errorf("ExpandHome abs = %q, want /abs/path", got)
+	}
+}
+
+func TestUserDataDir_MissingDoesNotCreate(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "profile")
+	got, err := UserDataDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != dir {
+		t.Errorf("UserDataDir() = %q, want %q", got, dir)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("UserDataDir must not mkdir %s: %v", dir, err)
 	}
 }
 

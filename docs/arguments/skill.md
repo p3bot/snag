@@ -110,7 +110,7 @@ Fetch modifiers (`--format`, `-o`, `-d`, `--timeout`, `--wait-for`, `--port`, an
 
 **Silently ignored:**
 
-`--format`, `--output`, `--output-dir`, `--timeout`, `--wait-for`, `--port`, `--close-tab`, `--force-headless`, `--user-agent`, `--user-data-dir`
+`--format`, `--output`, `--output-dir`, `--timeout`, `--wait-for`, `--port`, `--close-tab`, `--force-headless`, `--user-agent`, `--user-data-dir`, `--temp-profile`
 
 #### Examples
 

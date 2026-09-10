@@ -133,9 +133,7 @@ func handleInfoFromTab(cmd *cobra.Command) error {
 	if cmd.Flags().Changed("user-agent") {
 		logger.Warning("--user-agent is ignored with --tab (cannot change existing tab's user agent)")
 	}
-	if cmd.Flags().Changed("user-data-dir") {
-		logger.Warning("--user-data-dir ignored when connecting to existing browser")
-	}
+	warnProfileFlagsIfConnecting(cmd)
 
 	outputFile := strings.TrimSpace(flagOutput)
 	if cmd.Flags().Changed("output") && outputFile != "" {

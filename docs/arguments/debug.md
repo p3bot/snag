@@ -60,6 +60,7 @@ snag https://example.com --debug
 - `--debug` + skill verb - Works normally (debug logging during skill modes)
 - `--debug` + `--color` - Works normally (colours debug stderr when the detector is on)
 - `--debug` + `--user-data-dir` - Works normally (debug logs with custom profile)
+- `--debug` + `--temp-profile` - Works normally (debug logs with ephemeral profile)
 - `--debug` + `--user-agent` - Works normally (debug logs with custom UA)
 - `--debug` + all browser/output/timing flags - Works normally
 

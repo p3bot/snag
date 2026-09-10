@@ -135,7 +135,7 @@ func TestCLI_PageLoadTimeout_NoSignal(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	_, stderr, err := runSnag("--force-headless", "--timeout", "2", server.URL)
+	_, stderr, err := runSnagLaunch("--force-headless", "--timeout", "2", server.URL)
 	assertExitCode(t, err, ExitCodeError)
 	assertContains(t, stderr, "Error:")
 	if !bytes.Contains([]byte(stderr), []byte("timeout")) && !bytes.Contains([]byte(stderr), []byte("Timeout")) {

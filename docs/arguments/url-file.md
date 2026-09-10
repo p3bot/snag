@@ -156,6 +156,7 @@ snag --url-file urls.txt https://example.com https://go.dev
 | `--url-file` + `--wait-for`      | Works normally | Wait for selector on every page  |
 | `--url-file` + `--user-agent`    | Works normally | Applied to all new pages         |
 | `--url-file` + `--user-data-dir` | Works normally | Use custom browser profile       |
+| `--url-file` + `--temp-profile`  | Works normally | Ephemeral profile for this launch |
 | `--url-file` + `--port`          | Works normally | Use specified port for browser   |
 
 **Special Behaviors:**

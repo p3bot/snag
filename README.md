@@ -412,125 +412,69 @@ done
 
 ### CI/CD Integration
 
+Unspecified launches share a persistent profile (a Chromium singleton). CI jobs should pass `--temp-profile` so parallel jobs and leftover Chrome on a shared runner cannot hit the profile lock.
+
 ```bash
 # Fetch documentation in CI pipeline
-snag --force-headless --timeout 30 https://docs.example.com > docs.md
+snag --temp-profile --force-headless --timeout 30 https://docs.example.com > docs.md
 
 # Fetch without progress logs (default)
-snag --force-headless https://example.com > output.md
+snag --temp-profile --force-headless https://example.com > output.md
 ```
 
 ## Authentication
 
-snag makes it easy to fetch content from authenticated/private sites using persistent browser sessions.
+Launched browsers share one persistent snag profile (not your everyday Chrome/Chromium profile):
 
-### Method 1: Visible Browser Mode
+- Linux: `$XDG_STATE_HOME/snag/chrome` when that variable is non-empty and absolute; otherwise `$HOME/.local/state/snag/chrome`
+- macOS: `$HOME/Library/Application Support/snag/chrome`
 
-Open a browser, authenticate manually, then snag connects to it:
+Relative or empty `XDG_STATE_HOME` is ignored. The directory is created on first launch. Headless close and `--kill-browser` do not delete it.
+
+That profile is a Chromium singleton. A second unspecified launch (including `--force-headless --port 9223` while a visible snag browser still holds the default profile) fails with Chrome's profile lock. Extra instances use `--temp-profile` or a different `--user-data-dir`. `--user-data-dir` and `--temp-profile` are mutually exclusive.
+
+### Method 1: Login, quit, then headless
 
 ```bash
-# Step 1: Open browser in visible mode and log in manually
-# Note: Using the --open-browser (-b) switch enables the required DevTools protocol
 snag --open-browser
+# Log in in the window, then quit the browser
 
-# Step 2: In the browser window, navigate to your site and log in
-# (Leave the browser open)
-
-# Step 3: Fetch authenticated content - snag reuses your session
 snag https://private.example.com
-
-# Step 4: Fetch more pages with the same session
-snag https://private.example.com/dashboard
-snag https://private.example.com/settings
+# Headless launch reuses the same snag profile (cookies persist)
 ```
 
-### Method 2: Force Visible Mode
-
-Let snag launch the browser for you:
+### Method 2: Leave the window open (same-port CDP)
 
 ```bash
-# Open browser and navigate to page for authentication
-snag --open-browser https://private.example.com
+snag --open-browser
+# Log in and leave the browser running on port 9222
 
-# Authenticate in the browser window that opens
-# Then leave it running
-
-# Subsequent calls reuse the session
-snag https://private.example.com/other-page
+snag https://private.example.com
+snag -t "dashboard" -o data.md
+# Attaches via CDP; does not launch a second profile
 ```
 
-### Method 3: Existing Chromium Session
-
-Keep one browser session for multiple snag calls:
+### Method 3: Existing Chromium session
 
 ```bash
-# Terminal 1: Start Chromium with remote debugging
 chromium --remote-debugging-port=9222 --user-data-dir=/tmp/chromium-profile
-
-# Log in to your sites manually in this browser
-
-# Terminal 2: Use snag with the existing session
 snag https://authenticated-site1.com
-snag https://authenticated-site2.com
-snag https://authenticated-site3.com
 ```
 
-All three commands share authentication state - no repeated logins required!
+Connecting to an already-running debugging browser keeps that browser's own profile. `--user-data-dir` and `--temp-profile` are ignored with a warning.
 
-### Method 4: Using Your Default Chrome Profile
-
-You can use your existing Chrome profile with all its saved logins and cookies:
-
-**Option A: Daily workflow - Use snag as your Chrome launcher**
-
-If you use snag regularly, you can make it your primary way to launch Chrome:
+### Method 4: Isolation and real Chrome profiles
 
 ```bash
-# Close your regular Chrome first, then launch via snag:
-snag --open-browser --user-data-dir ~/.config/google-chrome                       # Linux
-snag --open-browser --user-data-dir ~/.config/chromium                            # Linux Chromium
-snag --open-browser --user-data-dir ~/Library/Application\ Support/Google/Chrome  # macOS
+# Ephemeral (old Rod temp behaviour); headless close deletes the dir
+snag --temp-profile https://example.com
 
-# Now browse normally AND use snag for tab fetching:
-snag --list-tabs
-snag -t 1                                    # Fetch from any tab
-snag https://example.com                     # Open new tabs
+# Work vs personal, or a second instance on another port
+snag --open-browser --port 9223 --user-data-dir ~/.snag/work
+
+# Your real Chrome profile (Chrome must be closed; risk of corruption)
+snag --open-browser --user-data-dir ~/.config/google-chrome
 ```
-
-This gives you your full Chrome experience (bookmarks, extensions, history, passwords) PLUS snag's tab management capabilities!
-
-**Option B: One-off fetches with your profile**
-
-```bash
-# Must close Chrome first!
-snag --user-data-dir ~/.config/google-chrome \
-  https://private.example.com
-```
-
-**Important caveats:**
-
-1. **Chrome must be closed** - You cannot run both Chrome and snag with the same profile simultaneously. Chrome locks profile directories to prevent corruption.
-
-2. **Risk of corruption** - If something goes wrong, you could corrupt your primary profile data. Consider using a separate profile for automation.
-
-3. **Profile structure** - Chrome's `--user-data-dir` points to the parent directory containing multiple profiles (Default, Profile 1, etc.). Chrome will use the Default profile unless you specify otherwise.
-
-**Option C: Safer alternative - Use a dedicated profile for snag**
-
-```bash
-# Create and use a dedicated profile for snag
-snag --user-data-dir ~/.config/google-chrome/snag-profile \
-  --open-browser
-
-# Authenticate once in the browser window
-# Profile persists between runs - no need to re-authenticate!
-
-# Subsequent fetches reuse the same profile
-snag --user-data-dir ~/.config/google-chrome/snag-profile \
-  https://private.example.com
-```
-
-The dedicated profile approach gives you persistence without risking your main Chrome profile.
 
 ## Advanced Usage
 
@@ -702,6 +646,8 @@ snag --port 9223 https://example.com
 --force-headless           Force headless mode even if Chromium is running
 -b, --open-browser         Open Chromium browser in visible state (no URL required)
 -k, --kill-browser         Kill browser processes with remote debugging enabled
+--user-data-dir <dir>      Chromium user data directory (overrides the persistent snag profile)
+--temp-profile             Ephemeral profile for this launch (mutually exclusive with --user-data-dir)
 ```
 
 ### Agent skill

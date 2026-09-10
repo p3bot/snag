@@ -90,6 +90,7 @@ snag -d output/ https://example.com https://google.com
 | `<url>` + `--port`          | Works normally | Use specified remote debugging port |
 | `<url>` + `--user-agent`    | Works normally | Set user agent for new page         |
 | `<url>` + `--user-data-dir` | Works normally | Use custom browser profile          |
+| `<url>` + `--temp-profile`  | Works normally | Ephemeral profile for this launch   |
 
 **Special Behaviors:**
 

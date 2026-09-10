@@ -18,7 +18,7 @@
 **Primary Purpose:**
 
 - List all open tabs in an existing browser connection
-- Standalone mode: ignores fetch modifiers except `--port` and logging; conflicts with skill verbs
+- Standalone mode: ignores fetch modifiers except `--port` and logging; profile flags warn then are ignored; conflicts with skill verbs
 - Lists tabs and exits snag immediately
 
 **Core Mode:**
@@ -32,7 +32,7 @@ snag --list-tabs --verbose
 - Connects to existing browser (or errors if none found)
 - Displays tab list to stdout
 - Exits snag immediately
-- Ignores fetch modifiers except `--port` and logging flags
+- Ignores fetch modifiers except `--port` and logging flags; `--user-data-dir` and `--temp-profile` warn then are ignored
 - Skill verbs (`--skill`, `--skill-install`, `--skill-list`, `--skill-uninstall`) are a usage-class error (neither mode runs)
 
 **No Browser Connection:**
@@ -46,7 +46,7 @@ snag --list-tabs --verbose
 2. `--version` (overrides everything below)
 3. Skill verbs vs `--list-tabs` → usage-class error (neither runs)
 4. `--list-tabs` (overrides remaining fetch flags)
-5. All other flags (ignored when `--list-tabs` is present)
+5. Remaining flags ignored when `--list-tabs` is present (`--user-data-dir` / `--temp-profile` warn first)
 
 #### Interaction Matrix
 
@@ -66,9 +66,9 @@ snag --list-tabs --verbose
 | `--list-tabs` + `--kill-browser` | **Error**              | `"Cannot use --kill-browser with --list-tabs (conflicting operations)"` |
 | `--list-tabs` + skill verb       | **Error**              | `"Cannot use a skill flag with --list-tabs (conflicting operations)"` |
 
-**All Other Flags Are SILENTLY IGNORED:**
+**Other flags:**
 
-`--list-tabs` ignores remaining fetch arguments (skill verbs error, see above):
+`--list-tabs` ignores remaining fetch arguments (skill verbs error, see above). Profile flags warn because they cannot change a running browser:
 
 | Combination                        | Behavior                  | Notes                                |
 | ---------------------------------- | ------------------------- | ------------------------------------ |
@@ -85,7 +85,8 @@ snag --list-tabs --verbose
 | `--list-tabs` + `--tab`            | Flag ignored, tabs listed | Lists all tabs (no single tab fetch) |
 | `--list-tabs` + `--all-tabs`       | Flag ignored, tabs listed | Lists tabs (no fetching)             |
 | `--list-tabs` + `--user-agent`     | Flag ignored, tabs listed | Lists tabs (no navigation)           |
-| `--list-tabs` + `--user-data-dir`  | Flag ignored, tabs listed | Connects to existing browser         |
+| `--list-tabs` + `--user-data-dir`  | **Warning**, ignored | `"Warning: --user-data-dir ignored when connecting to existing browser"` |
+| `--list-tabs` + `--temp-profile`   | **Warning**, ignored | `"Warning: --temp-profile ignored when connecting to existing browser"` |
 
 **Rationale:**
 

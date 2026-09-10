@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Successful fetch progress (browser launched/connected, fetching, fetched successfully, batch counters) is silent by default; use `--verbose` to print it. Warnings, error recovery hints, and result announcements (generated filename, saved-to, browser opened) still print
 - Removed `--quiet` / `-q`; passing them is an unknown-flag error
 - `--info` no longer forces errors-only stderr; warnings, recovery hints, and save announcements print; fetch progress stays verbose-only
+- Unspecified launches use a persistent snag profile (`$XDG_STATE_HOME/snag/chrome` on Linux, `~/Library/Application Support/snag/chrome` on macOS), not Rod's per-launch temp directory. The default profile is a Chromium singleton: a second unspecified launch on another port fails with Chrome's profile lock unless `--temp-profile` or `--user-data-dir` is set
+
+### Added
+
+- `--temp-profile` for the previous ephemeral launch behaviour (mutually exclusive with `--user-data-dir`)
 
 ### Changed
 
@@ -19,9 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Install with `go install github.com/p3bot/snag/cmd/snag@latest`
 - Version ldflags symbol is `github.com/p3bot/snag/internal/cli.Version`
 - Launched sessions use the real host Chrome identity by default (no Rod laptop device emulation, `--headless=new`). `--user-agent` overrides that identity.
+- `--doctor` reports snag's resolved launch profile (honours `--user-data-dir` / `--temp-profile`; stat only) and labels the vendor browser profile separately
 
 ### Fixed
 
+- A second unspecified launch that hits Chrome's profile lock reports `launch profile is in use` and suggests `snag --temp-profile --force-headless --port 9223 <url>` (or the requested port when it is not 9222), instead of only Rod's debug-URL failure
 - `--info` domain field no longer truncates IPv6 hostnames
 - Auto-generated filenames no longer mangle IPv6 hosts when falling back to a URL slug
 - `--doctor` counts tabs via Chrome's HTTP `/json/list` instead of attaching a DevTools session

@@ -50,6 +50,7 @@ type Config struct {
 	OpenBrowser   bool
 	UserAgent     string
 	UserDataDir   string
+	TempProfile   bool
 }
 
 func (c *Config) BrowserOptions() browser.BrowserOptions {
@@ -59,6 +60,7 @@ func (c *Config) BrowserOptions() browser.BrowserOptions {
 		OpenBrowser:   c.OpenBrowser,
 		UserAgent:     c.UserAgent,
 		UserDataDir:   c.UserDataDir,
+		TempProfile:   c.TempProfile,
 	}
 }
 
@@ -66,7 +68,7 @@ func (c *Config) BrowserOptions() browser.BrowserOptions {
 // launch options through Config.BrowserOptions so every start path shares one mapping.
 func browserOptionsFromFlags(cmd *cobra.Command, openBrowser, forceHeadless bool) (browser.BrowserOptions, error) {
 	validatedUserDataDir := ""
-	if cmd.Flags().Changed("user-data-dir") {
+	if !tempProfile && cmd.Flags().Changed("user-data-dir") {
 		validatedDir, err := validate.UserDataDir(userDataDir)
 		if err != nil {
 			return browser.BrowserOptions{}, err
@@ -80,6 +82,7 @@ func browserOptionsFromFlags(cmd *cobra.Command, openBrowser, forceHeadless bool
 		OpenBrowser:   openBrowser,
 		UserAgent:     validate.UserAgent(userAgent, cmd.Flags().Changed("user-agent")),
 		UserDataDir:   validatedUserDataDir,
+		TempProfile:   tempProfile,
 	}
 	return cfg.BrowserOptions(), nil
 }
@@ -107,6 +110,7 @@ var (
 	colorMode      string
 	userAgent      string
 	userDataDir    string
+	tempProfile    bool
 	skillPrint     bool
 	skillInstall   []string
 	skillList      bool
@@ -159,9 +163,10 @@ EXAMPLES:
   snag -t 2-5 -d tabs/                 # Fetch tabs 2 through 5
   snag --all-tabs -d output/           # Fetch all open tabs
 
-  # Authenticated sessions
-  snag --open-browser                  # Open browser, login manually
-  snag -t "dashboard" -o data.md       # Fetch authenticated page
+  # Authenticated sessions (persistent snag profile; extra instances need --temp-profile)
+  snag --open-browser                  # Login, then quit or leave open
+  snag example.com                     # Same profile after quit; CDP attach if left open
+  snag --temp-profile example.com      # Isolated ephemeral launch
 
   # Advanced options
   snag --wait-for ".content" example.com
@@ -184,7 +189,8 @@ OPTIONS:
       --force-headless         Force headless mode even if the browser is running
   -p, --port int               Chromium/Chrome remote debugging port (default 9222)
       --user-agent string      Override the browser user agent
-      --user-data-dir string   Custom Chromium/Chrome user data directory (for session isolation)
+      --user-data-dir string   Chromium user data directory (overrides the persistent snag profile)
+      --temp-profile           Ephemeral profile for this launch (mutually exclusive with --user-data-dir)
 
       --timeout int            Page load timeout in seconds (default %d)
   -w, --wait-for string        Wait for CSS selector before extracting content
@@ -223,7 +229,8 @@ func init() {
 	rootCmd.Flags().StringVarP(&waitFor, "wait-for", "w", "", "Wait for CSS selector before extracting content")
 	rootCmd.Flags().StringVarP(&tab, "tab", "t", "", "Fetch from existing tab by pattern (tab number or string)")
 	rootCmd.Flags().StringVar(&userAgent, "user-agent", "", "Override the browser user agent")
-	rootCmd.Flags().StringVar(&userDataDir, "user-data-dir", "", "Custom Chromium/Chrome user data directory (for session isolation)")
+	rootCmd.Flags().StringVar(&userDataDir, "user-data-dir", "", "Chromium user data directory (overrides the persistent snag profile)")
+	rootCmd.Flags().BoolVar(&tempProfile, "temp-profile", false, "Ephemeral profile for this launch (mutually exclusive with --user-data-dir)")
 
 	rootCmd.Flags().IntVar(&timeout, "timeout", DefaultTimeout, "Page load timeout in seconds")
 	rootCmd.Flags().IntVarP(&port, "port", "p", 9222, "Chromium/Chrome remote debugging port")
@@ -251,6 +258,7 @@ func init() {
 
 	rootCmd.MarkFlagsMutuallyExclusive("verbose", "debug")
 	rootCmd.MarkFlagsMutuallyExclusive("skill", "skill-install", "skill-list", "skill-uninstall")
+	rootCmd.MarkFlagsMutuallyExclusive("user-data-dir", "temp-profile")
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		useColor, err := logger.ResolveColor(colorMode)
@@ -515,16 +523,11 @@ func runCobra(cmd *cobra.Command, args []string) error {
 
 		outputFormat := validate.NormalizeFormat(flagFormat)
 
-		validatedUserDataDir := ""
-		if cmd.Flags().Changed("user-data-dir") {
-			validatedDir, err := validate.UserDataDir(userDataDir)
-			if err != nil {
-				return err
-			}
-			validatedUserDataDir = validatedDir
+		opts, err := browserOptionsFromFlags(cmd, openBrowser, forceHead)
+		if err != nil {
+			return err
 		}
 
-		validatedUserAgent := validate.UserAgent(userAgent, cmd.Flags().Changed("user-agent"))
 		validatedWaitFor := validate.WaitFor(waitFor, cmd.Flags().Changed("wait-for"))
 
 		config := &Config{
@@ -538,8 +541,9 @@ func runCobra(cmd *cobra.Command, args []string) error {
 			CloseTab:      closeTab,
 			ForceHeadless: forceHead,
 			OpenBrowser:   openBrowser,
-			UserAgent:     validatedUserAgent,
-			UserDataDir:   validatedUserDataDir,
+			UserAgent:     opts.UserAgent,
+			UserDataDir:   opts.UserDataDir,
+			TempProfile:   opts.TempProfile,
 		}
 
 		logger.Debug("Config: format=%s, timeout=%d, port=%d", config.Format, config.Timeout, config.Port)

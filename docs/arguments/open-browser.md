@@ -103,6 +103,7 @@ All output/format flags are **warned and ignored** because `--open-browser` does
 | `--open-browser` + `--user-agent` (no URLs) | Works normally            | UA set on the launched Chrome process                                      |
 | `--open-browser` + `--user-agent` + URLs    | Works normally            | UA applied at launch and when opening URLs in tabs                         |
 | `--open-browser` + `--user-data-dir`        | Works normally            | Launch visible browser with custom profile                                 |
+| `--open-browser` + `--temp-profile`         | Works normally            | Launch visible browser with an ephemeral profile                           |
 
 If a debug browser is already running, `--user-agent` is ignored with a warning from the attach path (the running process already has its own user agent).
 

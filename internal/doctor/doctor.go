@@ -34,10 +34,21 @@ type DoctorReport struct {
 	ProfilePath   string
 	ProfileExists bool
 
+	SnagProfilePath      string
+	SnagProfileExists    bool
+	SnagProfileEphemeral bool
+
 	DefaultPortStatus *PortStatus
 	CustomPortStatus  *PortStatus // nil if --port not specified
 
 	EnvVars map[string]string
+}
+
+// ProfileFlags are the launch-profile flags doctor should report without
+// creating directories or launching a browser.
+type ProfileFlags struct {
+	UserDataDir string
+	TempProfile bool
 }
 
 // PortStatus contains information about a browser debugging port.
@@ -48,7 +59,7 @@ type PortStatus struct {
 	Error    error
 }
 
-func CollectDoctorInfo(snagVersion string, customPort int) (*DoctorReport, error) {
+func CollectDoctorInfo(snagVersion string, customPort int, profile ProfileFlags) (*DoctorReport, error) {
 	report := &DoctorReport{
 		SnagVersion: snagVersion,
 		GoVersion:   runtime.Version(),
@@ -85,6 +96,17 @@ func CollectDoctorInfo(snagVersion string, customPort int) (*DoctorReport, error
 		profilePath, exists := bm.GetProfilePath()
 		report.ProfilePath = profilePath
 		report.ProfileExists = exists
+	}
+
+	launch, err := browser.ResolveLaunchProfile(profile.UserDataDir, profile.TempProfile)
+	if err != nil {
+		report.SnagProfilePath = ""
+		report.SnagProfileExists = false
+		report.SnagProfileEphemeral = profile.TempProfile
+	} else {
+		report.SnagProfilePath = launch.Path
+		report.SnagProfileExists = launch.Exists
+		report.SnagProfileEphemeral = launch.Ephemeral
 	}
 
 	report.DefaultPortStatus = checkPortConnection(9222)
@@ -199,9 +221,22 @@ func (dr *DoctorReport) String() string {
 		}
 	}
 
+	buf.WriteString(dr.formatSection("snag Launch Profile"))
+	if dr.SnagProfileEphemeral {
+		buf.WriteString(dr.formatItem("Path", "ephemeral (--temp-profile)"))
+	} else if dr.SnagProfilePath != "" {
+		buf.WriteString(dr.formatCheck("Path", dr.SnagProfilePath, dr.SnagProfileExists))
+	} else {
+		buf.WriteString(dr.formatItem("Path", "(unresolved)"))
+	}
+
 	if dr.ProfilePath != "" {
-		buf.WriteString(dr.formatSection("Profile Location"))
-		buf.WriteString(dr.formatCheck(dr.BrowserName, dr.ProfilePath, dr.ProfileExists))
+		buf.WriteString(dr.formatSection("Detected Browser Profile"))
+		label := dr.BrowserName
+		if label == "" {
+			label = "Browser"
+		}
+		buf.WriteString(dr.formatCheck(label, dr.ProfilePath, dr.ProfileExists))
 	}
 
 	buf.WriteString(dr.formatSection("Connection Status"))

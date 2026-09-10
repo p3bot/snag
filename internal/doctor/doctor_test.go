@@ -7,6 +7,8 @@
 package doctor
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -195,17 +197,19 @@ func TestFormatPortStatus(t *testing.T) {
 // TestDoctorReportString tests the full String() output.
 func TestDoctorReportString(t *testing.T) {
 	report := &DoctorReport{
-		SnagVersion:    "0.0.5",
-		LatestVersion:  "0.0.6",
-		GoVersion:      "go1.25.3",
-		OS:             "darwin",
-		Arch:           "arm64",
-		WorkingDir:     "/Users/test/projects/snag",
-		BrowserName:    "Chrome",
-		BrowserPath:    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-		BrowserVersion: "Google Chrome 141.0.7390.123",
-		ProfilePath:    "/Users/test/Library/Application Support/Google/Chrome",
-		ProfileExists:  true,
+		SnagVersion:       "0.0.5",
+		LatestVersion:     "0.0.6",
+		GoVersion:         "go1.25.3",
+		OS:                "darwin",
+		Arch:              "arm64",
+		WorkingDir:        "/Users/test/projects/snag",
+		BrowserName:       "Chrome",
+		BrowserPath:       "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+		BrowserVersion:    "Google Chrome 141.0.7390.123",
+		ProfilePath:       "/Users/test/Library/Application Support/Google/Chrome",
+		ProfileExists:     true,
+		SnagProfilePath:   "/Users/test/Library/Application Support/snag/chrome",
+		SnagProfileExists: true,
 		DefaultPortStatus: &PortStatus{
 			Port:     9222,
 			Running:  true,
@@ -228,7 +232,8 @@ func TestDoctorReportString(t *testing.T) {
 		"Version Information",
 		"Working Directory",
 		"Browser Detection",
-		"Profile Location",
+		"snag Launch Profile",
+		"Detected Browser Profile",
 		"Connection Status",
 		"Environment Variables",
 	}
@@ -248,6 +253,7 @@ func TestDoctorReportString(t *testing.T) {
 		"/Users/test/projects/snag",
 		"Detected:            Chrome",
 		"Version:             Google Chrome 141.0.7390.123",
+		"✓ /Users/test/Library/Application Support/snag/chrome",
 		"✓ /Users/test/Library/Application Support/Google/Chrome",
 		"✓ Running (7 tabs open)",
 		"CHROME_PATH:         (not set)",
@@ -342,9 +348,11 @@ func TestDoctorReportString_NoBrowser(t *testing.T) {
 		}
 	}
 
-	// Should NOT show Profile Location section when no browser
-	if strings.Contains(output, "Profile Location") {
-		t.Error("String() should not show Profile Location when no browser detected")
+	if !strings.Contains(output, "snag Launch Profile") {
+		t.Error("String() should show snag Launch Profile even when no browser detected")
+	}
+	if strings.Contains(output, "Detected Browser Profile") {
+		t.Error("String() should not show Detected Browser Profile when no browser detected")
 	}
 }
 
@@ -433,7 +441,7 @@ func TestDoctorReportString_EnvVarsSet(t *testing.T) {
 
 // TestCollectDoctorInfo tests the data collection function.
 func TestCollectDoctorInfo(t *testing.T) {
-	report, err := CollectDoctorInfo("dev", 9222)
+	report, err := CollectDoctorInfo("dev", 9222, ProfileFlags{})
 
 	if err != nil {
 		t.Fatalf("CollectDoctorInfo() returned error: %v", err)
@@ -478,7 +486,7 @@ func TestCollectDoctorInfo(t *testing.T) {
 
 // TestCollectDoctorInfo_CustomPort tests collection with custom port.
 func TestCollectDoctorInfo_CustomPort(t *testing.T) {
-	report, err := CollectDoctorInfo("dev", 9223)
+	report, err := CollectDoctorInfo("dev", 9223, ProfileFlags{})
 
 	if err != nil {
 		t.Fatalf("CollectDoctorInfo() returned error: %v", err)
@@ -498,7 +506,7 @@ func TestCollectDoctorInfo_CustomPort(t *testing.T) {
 
 // TestCollectDoctorInfo_DefaultPort tests that custom status is nil for default port.
 func TestCollectDoctorInfo_DefaultPort(t *testing.T) {
-	report, err := CollectDoctorInfo("dev", 9222)
+	report, err := CollectDoctorInfo("dev", 9222, ProfileFlags{})
 
 	if err != nil {
 		t.Fatalf("CollectDoctorInfo() returned error: %v", err)
@@ -510,6 +518,42 @@ func TestCollectDoctorInfo_DefaultPort(t *testing.T) {
 	}
 	if report.CustomPortStatus != nil {
 		t.Error("CustomPortStatus should be nil when port is default 9222")
+	}
+	if report.SnagProfileEphemeral {
+		t.Error("default snag profile should not be ephemeral")
+	}
+	if report.SnagProfilePath == "" {
+		t.Error("SnagProfilePath should be resolved")
+	}
+}
+
+func TestCollectDoctorInfo_TempProfile(t *testing.T) {
+	report, err := CollectDoctorInfo("dev", 9222, ProfileFlags{TempProfile: true})
+	if err != nil {
+		t.Fatalf("CollectDoctorInfo() returned error: %v", err)
+	}
+	if !report.SnagProfileEphemeral {
+		t.Error("TempProfile should mark snag profile ephemeral")
+	}
+	if report.SnagProfilePath != "" {
+		t.Errorf("ephemeral path = %q, want empty", report.SnagProfilePath)
+	}
+}
+
+func TestCollectDoctorInfo_UserDataDirDoesNotCreate(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing-profile")
+	report, err := CollectDoctorInfo("dev", 9222, ProfileFlags{UserDataDir: missing})
+	if err != nil {
+		t.Fatalf("CollectDoctorInfo() returned error: %v", err)
+	}
+	if report.SnagProfilePath != missing {
+		t.Errorf("SnagProfilePath = %q, want %q", report.SnagProfilePath, missing)
+	}
+	if report.SnagProfileExists {
+		t.Error("missing override should not exist")
+	}
+	if _, err := os.Stat(missing); !os.IsNotExist(err) {
+		t.Fatalf("CollectDoctorInfo must not create %s", missing)
 	}
 }
 

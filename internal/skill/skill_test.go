@@ -45,7 +45,9 @@ func TestTextRequiredGuidance(t *testing.T) {
 		"--all-tabs",
 		"PDF/PNG never go to stdout",
 		"## Authenticated Page",
-		"log in in that window",
+		"--temp-profile",
+		"--user-data-dir",
+		"singleton",
 		`snag -t "pattern"`,
 	}
 	for _, n := range needles {

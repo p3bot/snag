@@ -291,38 +291,44 @@ func UserAgent(ua string, flagSet bool) string {
 	return ua
 }
 
-func UserDataDir(path string) (string, error) {
+// ExpandHome trims path and expands a leading ~ or ~/. It does not create
+// directories. Empty or whitespace-only input returns "".
+func ExpandHome(path string) (string, error) {
 	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", nil
+	}
+
+	if !strings.HasPrefix(path, "~") {
+		return path, nil
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	if path == "~" {
+		return homeDir, nil
+	}
+	if strings.HasPrefix(path, "~/") {
+		return filepath.Join(homeDir, path[2:]), nil
+	}
+	return path, nil
+}
+
+func UserDataDir(path string) (string, error) {
+	path, err := ExpandHome(path)
+	if err != nil {
+		return "", err
+	}
 
 	if path == "" {
 		logger.Warning("--user-data-dir is empty, using default profile")
 		return "", nil
 	}
 
-	if strings.HasPrefix(path, "~") {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("failed to get home directory: %w", err)
-		}
-		if path == "~" {
-			path = homeDir
-		} else if strings.HasPrefix(path, "~/") {
-			path = filepath.Join(homeDir, path[2:])
-		}
-	}
-
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
-		logger.Verbose("Creating user data directory: %s", path)
-		if err := os.MkdirAll(path, 0755); err != nil {
-			logger.Error("Failed to create user data directory: %s", path)
-			logger.ErrorWithSuggestion(
-				"Cannot create user data directory",
-				fmt.Sprintf("mkdir -p %s", path),
-			)
-			return "", fmt.Errorf("failed to create directory: %w", err)
-		}
-		logger.Verbose("User data directory created: %s", path)
 		return path, nil
 	}
 	if err != nil {

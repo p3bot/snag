@@ -216,7 +216,17 @@ func displayTabList(tabs []browser.TabInfo, w io.Writer, verbose bool) {
 	}
 }
 
+func warnProfileFlagsIfConnecting(cmd *cobra.Command) {
+	if cmd.Flags().Changed("user-data-dir") {
+		logger.Warning("--user-data-dir ignored when connecting to existing browser")
+	}
+	if cmd.Flags().Changed("temp-profile") {
+		logger.Warning("--temp-profile ignored when connecting to existing browser")
+	}
+}
+
 func handleListTabs(cmd *cobra.Command) error {
+	warnProfileFlagsIfConnecting(cmd)
 	ctx := cmd.Context()
 	bm, err := connectToExistingBrowser(ctx, port)
 	if err != nil {
@@ -246,9 +256,7 @@ func handleAllTabs(cmd *cobra.Command) error {
 	if cmd.Flags().Changed("user-agent") {
 		logger.Warning("--user-agent is ignored with --all-tabs (cannot change existing tabs' user agents)")
 	}
-	if cmd.Flags().Changed("user-data-dir") {
-		logger.Warning("--user-data-dir ignored when connecting to existing browser")
-	}
+	warnProfileFlagsIfConnecting(cmd)
 	if cmd.Flags().Changed("timeout") && waitFor == "" {
 		logger.Warning("--timeout is ignored without --wait-for when using --all-tabs")
 	}
@@ -379,9 +387,7 @@ func handleTabFetch(cmd *cobra.Command) error {
 	if cmd.Flags().Changed("user-agent") {
 		logger.Warning("--user-agent is ignored with --tab (cannot change existing tab's user agent)")
 	}
-	if cmd.Flags().Changed("user-data-dir") {
-		logger.Warning("--user-data-dir ignored when connecting to existing browser")
-	}
+	warnProfileFlagsIfConnecting(cmd)
 	if cmd.Flags().Changed("timeout") && !cmd.Flags().Changed("wait-for") {
 		logger.Warning("--timeout is ignored without --wait-for when using --tab")
 	}
@@ -1066,7 +1072,21 @@ func handleKillBrowser(cmd *cobra.Command) error {
 }
 
 func handleDoctor(cmd *cobra.Command) error {
-	report, err := doctor.CollectDoctorInfo(Version, port)
+	userDataDirSet := cmd.Flags().Changed("user-data-dir")
+	profileDir := ""
+	if userDataDirSet {
+		expanded, err := validate.ExpandHome(userDataDir)
+		if err != nil {
+			profileDir = strings.TrimSpace(userDataDir)
+		} else {
+			profileDir = expanded
+		}
+	}
+
+	report, err := doctor.CollectDoctorInfo(Version, port, doctor.ProfileFlags{
+		UserDataDir: profileDir,
+		TempProfile: tempProfile,
+	})
 	if err != nil {
 		logger.Verbose("Warning: Some diagnostic information could not be collected: %v", err)
 	}

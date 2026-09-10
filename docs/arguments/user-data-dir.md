@@ -15,12 +15,12 @@
 
 **Empty string:**
 
-- Behavior: **Warning + Ignored**, use browser default profile
+- Behavior: **Warning + Ignored**, fall through to the persistent snag profile (XDG/darwin path below)
 - Warning message: "Warning: --user-data-dir is empty, using default profile"
 
 **Whitespace-only string:**
 
-- Behavior: **Warning + Ignored** after trimming, use browser default profile
+- Behavior: **Warning + Ignored** after trimming, fall through to the persistent snag profile
 - All string arguments trimmed using `strings.TrimSpace()`
 - Same warning as empty string
 
@@ -65,8 +65,16 @@
 
 **Default value (no flag):**
 
-- Browser uses its default profile location
-- Varies by OS and browser (Chrome, Chromium, Edge, Brave)
+- Persistent snag profile shared by Chrome, Chromium, Edge, and Brave launches
+- Linux: `$XDG_STATE_HOME/snag/chrome` when non-empty and absolute, otherwise `$HOME/.local/state/snag/chrome`
+- macOS: `$HOME/Library/Application Support/snag/chrome`
+- Not the vendor browser's own profile (`~/.config/google-chrome`, etc.) unless you pass that path to `--user-data-dir`
+- Singleton: a second unspecified launch fails with Chrome's profile lock; use `--temp-profile` or another `--user-data-dir`
+
+**`--temp-profile`:**
+
+- Mutually exclusive with `--user-data-dir` (usage error, exit 1)
+- No magic path tokens (`tmp`, `-`, empty-string-as-temp)
 
 #### Interaction Matrix
 
@@ -87,16 +95,17 @@
 | Browser already running + `--user-data-dir`     | **Warning**, ignore flag | Cannot change profile of running browser       |
 | `--user-data-dir` + `--port` + existing browser | **Warning**, ignore flag | Connection to existing browser ignores profile |
 
-**Warning message:**
+**Warning messages when connecting:**
 
-- "Warning: --user-data-dir ignored when connecting to existing browser"
+- `"Warning: --user-data-dir ignored when connecting to existing browser"` (CLI tab/list/`--info --tab` paths)
+- `"Warning: --user-data-dir ignored (browser already running with its own profile)"` (launch/connect path, including `snag --user-data-dir DIR <url>` when a debugging browser is already on the port)
 
 **Multiple instances with same profile:**
 
-- Behavior: **Let browser error**
-- Chrome/Chromium prevents multiple instances with same profile directory
-- Error from browser: "Profile directory is locked" or similar
-- Documented limitation - users must use different profiles for different ports
+- Behavior: **Error** (exit 1) when a non-ephemeral launch fails and Chrome's `SingletonLock` is still in the profile dir
+- Chrome/Chromium prevents multiple instances with the same profile directory
+- Error: `launch profile is in use` with suggestion `snag --temp-profile --force-headless --port 9223 <url>` (keeps a non-default `--port`)
+- Extra instances need `--temp-profile` or a different `--user-data-dir` (and usually a different `--port`)
 
 **Profile persistence:**
 
@@ -113,12 +122,13 @@
 | `--user-data-dir` + `--url-file`     | Works normally           | Fetch all URLs from file using custom profile |
 | `--user-data-dir` + `--tab`          | **Warning**, ignore flag | Connecting to existing browser                |
 | `--user-data-dir` + `--all-tabs`     | **Warning**, ignore flag | Connecting to existing browser                |
-| `--user-data-dir` + `--list-tabs`    | `--list-tabs` overrides  | `--list-tabs` overrides all other options     |
-| `--user-data-dir` + `--doctor`       | **Flag ignored**         | Doctor overrides, diagnostics only            |
+| `--user-data-dir` + `--list-tabs`    | **Warning**, ignore flag | Connecting to existing browser                |
+| `--user-data-dir` + `--doctor`       | Works normally           | Doctor prints this path (stat only, no mkdir); mutex with `--temp-profile` still errors |
+| `--user-data-dir` + `--temp-profile` | **Error** (exit 1)       | Mutually exclusive isolation flags            |
 
 **Warning message for tab operations:**
 
-- "Warning: --user-data-dir ignored when connecting to existing browser"
+- `"Warning: --user-data-dir ignored when connecting to existing browser"`
 
 ## Output Control Interactions
 
@@ -246,7 +256,7 @@ snag --user-data-dir "   " https://example.com             # ⚠️ Whitespace, 
 # (Browser already running on port 9222)
 snag --user-data-dir ~/.snag/different --port 9222 --tab 1 # ⚠️ Flag ignored, connecting to existing
 snag --user-data-dir ~/.snag/profile --all-tabs            # ⚠️ Flag ignored, connecting to existing
-snag --user-data-dir ~/.snag/profile --list-tabs           # Flag ignored (list-tabs standalone)
+snag --user-data-dir ~/.snag/profile --list-tabs           # ⚠️ Flag ignored, connecting to existing
 ```
 
 ## Implementation Details
@@ -254,18 +264,19 @@ snag --user-data-dir ~/.snag/profile --list-tabs           # Flag ignored (list-
 **Location:**
 
 - Flag definition: `internal/cli/root.go` (`init`)
-- Path validation: `internal/validate` (`UserDataDir`)
+- Path validation: `internal/validate` (`UserDataDir` — expand, reject files, permission-check existing dirs; does not mkdir)
 - Tilde expansion: Before validation, using `os.UserHomeDir()` or equivalent
+- Directory creation: `internal/browser` (`EnsureUserDataDir` at launch, `0700`)
 - Browser launch: `internal/browser` (rod launcher with `--user-data-dir` flag)
 
 **How it works:**
 
 1. Read flag value from CLI framework
 2. Trim whitespace using `strings.TrimSpace()`
-3. If empty after trim → Warn, use browser default
+3. If empty after trim → Warn, use persistent snag profile
 4. Expand tilde (`~`) to home directory
 5. If directory exists → Validate it's a directory and has permissions
-6. If directory doesn't exist → Create it with `os.MkdirAll()` (like `mkdir -p`)
+6. If directory doesn't exist → Accept the path; launch creates it with `os.MkdirAll(path, 0700)` (like `mkdir -p`, owner-only)
 7. Pass to rod launcher as `--user-data-dir={path}` browser flag
 8. Browser loads profile from specified directory
 
@@ -275,15 +286,14 @@ snag --user-data-dir ~/.snag/profile --list-tabs           # Flag ignored (list-
 2. Check if empty → Warn if empty
 3. Expand tilde
 4. Check if path exists:
-   - If doesn't exist → Create it with `os.MkdirAll(path, 0755)` (like `mkdir -p`)
+   - If doesn't exist → Return the path (launch creates it `0700`; cookies live here)
    - If exists → Validate it's a directory and check permissions
 
-**Browser default profiles:**
+**snag default launch profile (not the vendor Chrome profile):**
 
-- Chrome (Linux): `~/.config/google-chrome/Default`
-- Chrome (macOS): `~/Library/Application Support/Google/Chrome/Default`
-- Chromium (Linux): `~/.config/chromium/Default`
-- Location varies by browser and OS
+- Linux: `$XDG_STATE_HOME/snag/chrome` or `$HOME/.local/state/snag/chrome`
+- macOS: `$HOME/Library/Application Support/snag/chrome`
+- Vendor profiles (`~/.config/google-chrome`, …) only if passed to `--user-data-dir`
 
 **Profile persistence:**
 

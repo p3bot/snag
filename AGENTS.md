@@ -269,6 +269,7 @@ go test -v -cover ./...              # With coverage
 - Single Cobra root. No product subcommands. Do not add `snag tabs list`, `snag skill`, or `snag completion`.
 - First clear-text positional is always a URL/address (bare hosts allowed). `snag skill` fetches host `skill`.
 - Product modes are flags: `--list-tabs`, `--all-tabs`, `--open-browser`, `--kill-browser`, `--doctor`, `--skill`, `--skill-install`, `--skill-list`, `--skill-uninstall`.
+- Launch profile flags: `--user-data-dir`, `--temp-profile` (mutually exclusive). Unspecified launches use a persistent snag profile, not Rod's per-launch temp dir.
 
 **File Structure:**
 
@@ -296,6 +297,8 @@ internal/cli/handlers.go       # handleListTabs, handleTabFetch
 1. Connect to existing Chrome (auto-detect)
 2. Launch headless (if none found)
 3. Open only (`--open-browser`)
+
+Unspecified launches share one persistent profile: `$XDG_STATE_HOME/snag/chrome` on Linux (default `~/.local/state/snag/chrome`; relative or empty `XDG_STATE_HOME` is ignored) or `~/Library/Application Support/snag/chrome` on macOS. That profile is a Chromium singleton. Extra instances need `--temp-profile` or `--user-data-dir`. Headless close and `--kill-browser` do not delete the default profile. `--force-headless` on another port still uses the default profile unless an isolation flag is set.
 
 **Tab Management (Phase 2):**
 
@@ -406,7 +409,8 @@ snag -t 2 --wait-for ".loaded"         # Wait for selector
 - Browser not found: Install Chromium-based browser (Firefox NOT supported)
 - Connection refused: Try different port `--port 9223`
 - Timeout: Increase with `--timeout 60`
-- Auth required: Use `--open-browser`, authenticate manually in visible browser
+- Auth required: `snag --open-browser`, log in, quit or leave open; later `snag <url>` reuses the persistent snag profile (or CDP-attaches if left open). Extra instances: `--temp-profile`
+- Profile lock on a second launch: use `--temp-profile` or a different `--user-data-dir` (Chrome locks the default snag profile)
 - Empty output: Try `--format html` or `--wait-for <selector>`
 - Tab errors: Run `snag --list-tabs` first to see available tabs
 - Stuck browser processes: Use `--kill-browser` to force-kill debugging browsers

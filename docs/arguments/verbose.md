@@ -75,6 +75,7 @@ snag --list-tabs --verbose
 - `--verbose` + skill verb - Works normally (verbose logging during skill modes)
 - `--verbose` + `--color` - Works normally (colours verbose stderr when the detector is on)
 - `--verbose` + `--user-data-dir` - Works normally (verbose logs with custom profile)
+- `--verbose` + `--temp-profile` - Works normally (verbose logs with ephemeral profile)
 - `--verbose` + `--user-agent` - Works normally (verbose logs with custom UA)
 - `--verbose` + all browser/output/timing flags - Works normally
 

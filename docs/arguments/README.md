@@ -4,7 +4,7 @@
 
 **Status:** All arguments analyzed and documented ✅ | All inconsistencies resolved ✅
 
-**Last Updated:** 2026-08-30
+**Last Updated:** 2026-09-09
 
 ---
 
@@ -32,7 +32,8 @@
 - [**`--version`** / **`-v`** - Show version](./version.md)
 - [**`--all-tabs`** / **`-a`** - Process all open tabs](./all-tabs.md)
 - [**`--user-agent STRING`** - Override the browser user agent](./user-agent.md)
-- [**`--user-data-dir DIRECTORY`** - Custom browser profile](./user-data-dir.md)
+- [**`--user-data-dir DIRECTORY`** - Override the persistent snag launch profile](./user-data-dir.md)
+- [**`--temp-profile`** - Ephemeral launch profile](./temp-profile.md)
 - [**`--skill` / `--skill-install` / `--skill-list` / `--skill-uninstall` / `--local`** - Agent skill print and install](./skill.md)
 
 ### Advanced Topics
@@ -75,7 +76,8 @@
 | `--list-tabs`      | `-l`    | Bool   | `false` | List all open tabs                         |
 | `--tab`            | `-t`    | String | -       | Fetch from existing tab (index or pattern) |
 | `--all-tabs`       | `-a`    | Bool   | `false` | Process all open tabs                      |
-| `--user-data-dir`  | -       | String | -       | Custom browser profile directory           |
+| `--user-data-dir`  | -       | String | -       | Override persistent snag launch profile    |
+| `--temp-profile`   | -       | Bool   | `false` | Ephemeral launch profile (mutex with `--user-data-dir`) |
 
 ### URL Input Flags
 
@@ -239,6 +241,8 @@ These determine the primary operation mode:
 - ✅ `--force-headless` - Browser mode
 - ✅ `--open-browser` - Open in visible browser
 - ✅ `--user-agent` - Override the browser user agent
+- ✅ `--user-data-dir` - Override persistent snag launch profile
+- ✅ `--temp-profile` - Ephemeral launch profile
 - ✅ Logging flags
 
 **Incompatible Flags:**
@@ -268,6 +272,8 @@ These determine the primary operation mode:
 - ✅ `--force-headless` - Browser mode
 - ✅ `--open-browser` - Opens all URLs in tabs, NO fetch
 - ✅ `--user-agent` - Applied to all
+- ✅ `--user-data-dir` - Override persistent snag launch profile
+- ✅ `--temp-profile` - Ephemeral launch profile
 - ✅ Logging flags
 
 **Incompatible Flags:**
@@ -311,6 +317,7 @@ See [tab.md](./tab.md) for complete details.
 - ❌ `--all-tabs` - Use one or the other (mutually exclusive)
 - ❌ `--force-headless` - Error (tab requires existing browser)
 - ⚠️ `--open-browser` - Warning, flag ignored (no content fetching)
+- ⚠️ `--user-data-dir` / `--temp-profile` - Warning, ignored (connects to existing browser)
 
 ### Mode 4: Fetch All Tabs
 
@@ -324,7 +331,6 @@ See [tab.md](./tab.md) for complete details.
 - ✅ `--wait-for` - Wait for same selector in each tab before fetching
 - ✅ `--port` - Remote debugging port
 - ✅ `--close-tab` - Close each tab after fetching; last tab closes browser
-- ✅ `--user-data-dir` - Custom browser profile
 - ✅ Logging flags
 
 **Incompatible Flags:**
@@ -335,6 +341,7 @@ See [tab.md](./tab.md) for complete details.
 - ❌ `--force-headless` - Error (tabs require existing browser)
 - ⚠️ `--open-browser` - Warning, flag ignored (no content fetching)
 - ⚠️ `--user-agent` - Warning, ignored (tabs already open with their own user agents)
+- ⚠️ `--user-data-dir` / `--temp-profile` - Warning, ignored (connects to existing browser)
 
 ### Mode 5: List Tabs
 
@@ -349,7 +356,8 @@ See [list-tabs.md](./list-tabs.md) for complete details.
 
 **Incompatible Flags:**
 
-- All other flags are silently ignored (standalone mode like `--help`)
+- `--user-data-dir` / `--temp-profile` warn, then list proceeds (connects to existing browser)
+- Remaining fetch flags are silently ignored (standalone mode like `--help`)
 
 ### Mode 6: Open Browser Only
 
@@ -360,7 +368,8 @@ See [open-browser.md](./open-browser.md) for complete details.
 **Compatible Flags:**
 
 - ✅ `--port` - Remote debugging port
-- ✅ `--user-data-dir` - Custom browser profile
+- ✅ `--user-data-dir` - Override persistent snag launch profile
+- ✅ `--temp-profile` - Ephemeral launch profile
 - ✅ Logging flags
 
 **Incompatible Flags:**

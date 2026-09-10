@@ -7,12 +7,12 @@
 **Boolean Flag:**
 
 - No value required (presence = enabled)
-- No validation errors possible
+- `--temp-profile` + `--user-data-dir` is a usage error (exit 1) before doctor runs; that mutex is Cobra's, not doctor's
 
 **Priority Behavior:**
 
 - Displays diagnostic information and exits immediately
-- Exit code 0 (always success)
+- Exit code 0 when doctor runs (partial checks still print)
 - Lower priority than `--help` and `--version`
 - Higher priority than `--kill-browser` and all content operations
 
@@ -48,22 +48,27 @@ snag --doctor --verbose
    - Browser executable path
    - Browser version (raw output from `--version`)
 
-4. **Connection Status:**
+4. **snag Launch Profile:**
+   - Path a launch would use (XDG/darwin default, `--user-data-dir`, or ephemeral for `--temp-profile`)
+   - Existence check (✓/✗); `--temp-profile` prints `ephemeral (--temp-profile)`
+   - Stat only: does not mkdir, write, or fail doctor (invalid/unreadable override still printed, exists = no)
+
+5. **Detected Browser Profile:**
+   - Vendor profile path for the detected browser (Chrome/Chromium/Edge/Brave), not snag's launch dir
+   - Existence check (✓/✗); omitted when no vendor path is resolved
+
+6. **Connection Status:**
    - Default port 9222 status (running/not running, tab count)
    - Custom port status if `--port` specified
 
-5. **Profile Location:**
-   - Profile path for detected browser
-   - Existence check (✓/✗)
-
-6. **Environment Variables:**
+7. **Environment Variables:**
    - `CHROME_PATH` (if set)
    - `CHROMIUM_PATH` (if set)
 
 **Exit Behavior:**
 
-- Always exits with code 0 (success)
-- Never fails even if some checks fail (partial information still useful)
+- Exit 0 when doctor runs, even if some checks fail (partial information still useful)
+- Exit 1 only for usage errors before doctor (skill conflict, `--temp-profile` + `--user-data-dir`)
 - Diagnostic mode complete → snag exits (no other operations performed)
 
 #### Interaction Matrix
@@ -91,9 +96,9 @@ snag --doctor --verbose
 | `--doctor` + `--verbose`  | Works normally | Verbose logging during diagnostic operations   |
 | `--doctor` + `--debug`    | Works normally | Debug logging during diagnostic operations     |
 
-**All Other Flags Are SILENTLY IGNORED:**
+**Flags that doctor honours or ignores:**
 
-`--doctor` acts like `--help` and overrides all other arguments:
+`--doctor` does not fetch or launch. `--port`, logging flags, `--user-data-dir`, and `--temp-profile` still affect the report. Other fetch/mode flags are ignored:
 
 | Combination                       | Behavior                       | Notes                                    |
 | --------------------------------- | ------------------------------ | ---------------------------------------- |
@@ -112,7 +117,9 @@ snag --doctor --verbose
 | `--doctor` + `--all-tabs`         | Flag ignored, doctor runs      | No content fetching                      |
 | `--doctor` + `--list-tabs`        | Flag ignored, doctor runs      | Doctor has higher priority               |
 | `--doctor` + `--user-agent`       | Flag ignored, doctor runs      | No navigation performed                  |
-| `--doctor` + `--user-data-dir`    | Flag ignored, doctor runs      | Connects to existing browser             |
+| `--doctor` + `--user-data-dir`    | Works normally                 | snag launch profile line uses that path (stat only) |
+| `--doctor` + `--temp-profile`     | Works normally                 | snag launch profile line reports ephemeral launches |
+| `--doctor` + `--temp-profile` + `--user-data-dir` | **Error** (exit 1) | Mutex; usage error before doctor runs |
 
 **Priority Rules:**
 
@@ -120,15 +127,15 @@ snag --doctor --verbose
 2. `--version` detected → Display version
 3. Skill flag + `--doctor` → usage-class error (neither runs)
 4. `--doctor` detected → Display diagnostics
-5. Ignore all other flags (except `--port` and logging flags which enhance diagnostics)
-6. Exit with code 0
+5. Ignore remaining flags except `--port`, logging flags, `--user-data-dir`, and `--temp-profile` (those last two affect the snag launch profile line; they still do not launch a browser)
+6. Exit with code 0 except `--temp-profile` + `--user-data-dir` (usage error, exit 1)
 
 **Rationale:**
 
-- `--doctor` is a simple informational command like `--help` or `--version`
-- Users expect it to "just work" without complex argument validation
-- Simplifies UX: No need to remember which flags conflict with `--doctor`
-- Other tools follow this pattern (e.g., `brew doctor <any-args>` ignores all args)
+- `--doctor` is a diagnostic command: it prints and exits; it does not fetch or launch
+- Fetch and mode flags are ignored so `snag --doctor <url>` still prints diagnostics
+- `--port`, logging flags, `--user-data-dir`, and `--temp-profile` change what the report shows
+- The profile-flag mutex still errors before doctor runs
 
 #### Examples
 
@@ -146,12 +153,16 @@ snag --doctor --verbose
 
 # With debug logging
 snag --doctor --debug
+
+# snag launch profile (stat only; does not mkdir)
+snag --doctor --user-data-dir /etc/hosts
+snag --doctor --temp-profile
 ```
 
-**Silently Ignores Other Flags:**
+**Ignores fetch and mode flags:**
 
 ```bash
-# All other flags are ignored, diagnostics displayed
+# Fetch/mode flags are ignored, diagnostics displayed
 snag --doctor https://example.com
 snag --doctor --output file.md
 snag --doctor --format pdf --wait-for ".content"
@@ -196,13 +207,17 @@ Browser Detection
   Path:            /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
   Version:         131.0.6778.85
 
+snag Launch Profile
+───────────────────
+  Path:            ✓ ~/Library/Application Support/snag/chrome
+
+Detected Browser Profile
+────────────────────────
+  Chrome:          ✓ ~/Library/Application Support/Google/Chrome
+
 Connection Status
 ─────────────────
   Port 9222:       ✓ Running (7 tabs open)
-
-Profile Location
-─────────────────
-  Chrome:          ✓ ~/Library/Application Support/Google/Chrome
 
 Environment Variables
 ─────────────────────
@@ -232,13 +247,13 @@ Browser Detection
   Path:            (none)
   Version:         (none)
 
+snag Launch Profile
+───────────────────
+  Path:            ✗ ~/.local/state/snag/chrome
+
 Connection Status
 ─────────────────
   Port 9222:       ✗ Not running
-
-Profile Location
-─────────────────
-  (no browser detected)
 ```
 
 **Update Check Failed:**

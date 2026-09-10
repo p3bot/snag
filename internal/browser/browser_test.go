@@ -13,11 +13,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
+	"github.com/go-rod/rod/lib/launcher/flags"
 
 	"github.com/p3bot/snag/internal/logger"
 )
@@ -606,6 +608,48 @@ func TestConnectCanceled(t *testing.T) {
 	if err := bm.OpenBrowserOnly(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("OpenBrowserOnly cancelled ctx: %v", err)
 	}
+}
+
+func TestTempProfileHeadlessCloseRemovesDir(t *testing.T) {
+	bm := NewBrowserManager(BrowserOptions{
+		Port:          freePort(t),
+		ForceHeadless: true,
+		TempProfile:   true,
+	})
+	if _, err := bm.FindBrowserPath(); err != nil {
+		t.Skip("browser not available")
+	}
+	if err := bm.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	if bm.launcher == nil {
+		t.Fatal("expected a launched browser")
+	}
+	dir := bm.launcher.Get(flags.UserDataDir)
+	if dir == "" {
+		t.Fatal("launcher user-data-dir is empty")
+	}
+	if !strings.HasPrefix(dir, os.TempDir()) {
+		t.Fatalf("temp profile %q is not under %s", dir, os.TempDir())
+	}
+	if _, err := os.Stat(dir); err != nil {
+		t.Fatalf("temp profile missing while running: %v", err)
+	}
+	bm.Close()
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("temp profile still present after Close(): %s (%v)", dir, err)
+	}
+}
+
+func freePort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+	return port
 }
 
 func TestProbePort_ConnectionRefused(t *testing.T) {

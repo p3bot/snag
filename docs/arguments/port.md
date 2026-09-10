@@ -76,13 +76,13 @@ snag --port 9223 https://example.com
 | Same profile, different ports                        | Attempt launch, Chrome will error         | Chrome locks user data directories - **documented limitation**         |
 | Same port, different profiles                        | Port in use error                         | Cannot run multiple browsers on same port                              |
 | Connecting to existing + different `--user-data-dir` | **Warn**, continue connecting             | "Warning: --user-data-dir ignored when connecting to existing browser" |
-| Neither specified                                    | Port 9222 + default profile               | Current behavior preserved                                             |
+| Neither specified                                    | Port 9222 + persistent snag profile       | Default profile is a singleton                                         |
 
 **Multi-instance support:**
 
-- Different ports + different `--user-data-dir` → Multiple isolated browser instances
+- Different ports + different `--user-data-dir` or `--temp-profile` → Multiple isolated browser instances
 - Same port → Only one instance (conflict)
-- Same profile → Chrome prevents (directory lock)
+- Same profile (including two unspecified launches) → Chrome prevents (directory lock)
 
 **Content Source Interactions:**
 
@@ -203,7 +203,7 @@ snag --open-browser --port 9223 --user-data-dir ~/.snag/profile1
 **Multi-instance considerations:**
 
 - Different ports enable multiple browser instances
-- Requires different `--user-data-dir` for each instance (Chrome locks profiles)
+- Requires `--temp-profile` or a different `--user-data-dir` for each extra instance (Chrome locks profiles; the unspecified default is a singleton)
 - Each instance independent (sessions, cookies, authentication)
 
 ---

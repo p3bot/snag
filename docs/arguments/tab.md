@@ -148,6 +148,7 @@ snag -t "(github|gitlab)\.com"                  # Regex: github.com or gitlab.co
 | `--tab` + `--close-tab`     | Works normally       | Close tab after fetching (covered in Task 9)                                              |
 | `--tab` + `--user-agent`    | **Warning**, ignored | `"Warning: --user-agent is ignored with --tab (cannot change existing tab's user agent)"` |
 | `--tab` + `--user-data-dir` | **Warning**, ignored | `"Warning: --user-data-dir ignored when connecting to existing browser"`                  |
+| `--tab` + `--temp-profile`  | **Warning**, ignored | `"Warning: --temp-profile ignored when connecting to existing browser"`                   |
 
 **Logging Flags (All Work Normally):**
 

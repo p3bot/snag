@@ -34,6 +34,9 @@ const (
 	ConnectTimeout   = 10 * time.Second
 	StabilizeTimeout = 3 * time.Second
 
+	defaultRemoteDebugPort = 9222
+	extraInstanceDebugPort = 9223
+
 	// headlessWindow is the virtual display and window size for launched
 	// headless sessions. Chromium's headless default is 800x600; --screen-info
 	// sizes the display (Chrome 142+) and --window-size matches it.
@@ -49,6 +52,7 @@ type BrowserManager struct {
 	launchedHeadless bool
 	userAgent        string
 	userDataDir      string
+	tempProfile      bool
 	forceHeadless    bool
 	openBrowser      bool
 	browserName      string
@@ -60,6 +64,7 @@ type BrowserOptions struct {
 	OpenBrowser   bool
 	UserAgent     string
 	UserDataDir   string
+	TempProfile   bool
 }
 
 type TabInfo struct {
@@ -133,6 +138,7 @@ func NewBrowserManager(opts BrowserOptions) *BrowserManager {
 		port:          opts.Port,
 		userAgent:     opts.UserAgent,
 		userDataDir:   opts.UserDataDir,
+		tempProfile:   opts.TempProfile,
 		forceHeadless: opts.ForceHeadless,
 		openBrowser:   opts.OpenBrowser,
 	}
@@ -154,9 +160,7 @@ func (bm *BrowserManager) Connect(ctx context.Context) error {
 			} else {
 				logger.Verbose("Connected to existing browser instance")
 			}
-			if bm.userDataDir != "" {
-				logger.Warning("--user-data-dir ignored (browser already running with its own profile)")
-			}
+			bm.warnIgnoredLaunchFlags()
 			if bm.userAgent != "" {
 				logger.Warning("--user-agent ignored (browser already running with its own user agent)")
 			}
@@ -243,16 +247,16 @@ func (bm *BrowserManager) launchBrowser(ctx context.Context, headless bool) (*ro
 		logger.Verbose("Using custom user agent: %s", bm.userAgent)
 	}
 
-	if bm.userDataDir != "" {
-		l = l.Set("user-data-dir", bm.userDataDir)
-		logger.Verbose("Using custom user data directory: %s", bm.userDataDir)
+	l, err = bm.applyLaunchProfile(l)
+	if err != nil {
+		return nil, err
 	}
 
 	l = l.Set("remote-debugging-port", fmt.Sprintf("%d", bm.port))
 
 	controlURL, err := l.Launch()
 	if err != nil {
-		return nil, fmt.Errorf("failed to launch browser: %w", err)
+		return nil, bm.wrapLaunchError(err)
 	}
 	logger.Debug("Browser launched with control URL: %s", controlURL)
 
@@ -265,10 +269,7 @@ func (bm *BrowserManager) launchBrowser(ctx context.Context, headless bool) (*ro
 		logger.Debug("Failed to connect to launched browser: %v", err)
 		// Close() does not kill a visible browser, so a failed start must
 		// tear down here (interrupt and CDP failure both land on this path).
-		l.Kill()
-		if bm.userDataDir == "" {
-			l.Cleanup()
-		}
+		bm.abandonLauncher(l)
 		bm.launcher = nil
 		bm.wasLaunched = false
 		bm.launchedHeadless = false
@@ -289,9 +290,7 @@ func (bm *BrowserManager) OpenBrowserOnly(ctx context.Context) error {
 	logger.Verbose("Checking for existing browser instance on port %d...", bm.port)
 	if _, err := bm.connectToExisting(ctx); err == nil {
 		logger.Success("Browser already running on port %d", bm.port)
-		if bm.userDataDir != "" {
-			logger.Warning("--user-data-dir ignored (browser already running with its own profile)")
-		}
+		bm.warnIgnoredLaunchFlags()
 		if bm.userAgent != "" {
 			logger.Warning("--user-agent ignored (browser already running with its own user agent)")
 		}
@@ -317,21 +316,18 @@ func (bm *BrowserManager) OpenBrowserOnly(ctx context.Context) error {
 		logger.Verbose("Using custom user agent: %s", bm.userAgent)
 	}
 
-	if bm.userDataDir != "" {
-		l = l.Set("user-data-dir", bm.userDataDir)
-		logger.Verbose("Using custom user data directory: %s", bm.userDataDir)
+	l, err = bm.applyLaunchProfile(l)
+	if err != nil {
+		return err
 	}
 
 	controlURL, err := l.Launch()
 	if err != nil {
-		return fmt.Errorf("failed to launch browser: %w", err)
+		return bm.wrapLaunchError(err)
 	}
 
 	abandon := func() {
-		l.Kill()
-		if bm.userDataDir == "" {
-			l.Cleanup()
-		}
+		bm.abandonLauncher(l)
 	}
 
 	browser, err := connectRod(ctx, controlURL)
@@ -352,6 +348,86 @@ func (bm *BrowserManager) OpenBrowserOnly(ctx context.Context) error {
 	logger.Info("You can now connect to it using: snag <url>")
 
 	return nil
+}
+
+func (bm *BrowserManager) warnIgnoredLaunchFlags() {
+	if bm.userDataDir != "" {
+		logger.Warning("--user-data-dir ignored (browser already running with its own profile)")
+	}
+	if bm.tempProfile {
+		logger.Warning("--temp-profile ignored (browser already running with its own profile)")
+	}
+}
+
+func (bm *BrowserManager) applyLaunchProfile(l *launcher.Launcher) (*launcher.Launcher, error) {
+	if bm.tempProfile && bm.userDataDir != "" {
+		return l, fmt.Errorf("user-data-dir and temp-profile are mutually exclusive")
+	}
+	if bm.tempProfile {
+		logger.Verbose("Using ephemeral user data directory")
+		return l, nil
+	}
+
+	dir := bm.userDataDir
+	if dir == "" {
+		var err error
+		dir, err = DefaultLaunchProfile()
+		if err != nil {
+			return l, fmt.Errorf("failed to resolve launch profile: %w", err)
+		}
+		bm.userDataDir = dir
+	}
+
+	created := false
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		logger.Verbose("Creating user data directory: %s", dir)
+		created = true
+	}
+
+	if err := EnsureUserDataDir(dir); err != nil {
+		logger.Error("Failed to create user data directory: %s", dir)
+		logger.ErrorWithSuggestion(
+			"Cannot create user data directory",
+			fmt.Sprintf("mkdir -p %s", dir),
+		)
+		return l, err
+	}
+	if created {
+		logger.Verbose("User data directory created: %s", dir)
+	}
+
+	l = l.Set("user-data-dir", dir)
+	logger.Verbose("Using user data directory: %s", dir)
+	return l, nil
+}
+
+func extraInstanceSuggestion(port int) string {
+	if port <= 0 || port == defaultRemoteDebugPort {
+		port = extraInstanceDebugPort
+	}
+	return fmt.Sprintf("snag --temp-profile --force-headless --port %d <url>", port)
+}
+
+func (bm *BrowserManager) wrapLaunchError(err error) error {
+	err = fmt.Errorf("failed to launch browser: %w", err)
+	if bm.tempProfile || !profileLockPresent(bm.userDataDir) {
+		return err
+	}
+	logger.ErrorWithSuggestion(
+		"Launch profile is in use by another Chrome process",
+		extraInstanceSuggestion(bm.port),
+	)
+	return fmt.Errorf("%w: %s: %w", ErrProfileInUse, bm.userDataDir, err)
+}
+
+func (bm *BrowserManager) abandonLauncher(l *launcher.Launcher) {
+	if l == nil {
+		return
+	}
+	l.Kill()
+	if bm.tempProfile {
+		l.Cleanup()
+	}
 }
 
 func (bm *BrowserManager) NewPage() (*Page, error) {
@@ -627,10 +703,7 @@ func (bm *BrowserManager) Close() {
 			}
 		}
 		if bm.launcher != nil {
-			bm.launcher.Kill()
-			if bm.userDataDir == "" {
-				bm.launcher.Cleanup()
-			}
+			bm.abandonLauncher(bm.launcher)
 		}
 		return
 	}

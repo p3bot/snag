@@ -87,6 +87,7 @@ Set a custom user agent string for browser requests. This flag overrides how the
 | `--user-agent` + `--open-browser` (no URL) | Works normally | UA set on the launched Chrome process                               |
 | `--user-agent` + `--open-browser` + URL    | Works normally | UA applied at launch and when opening URLs in tabs                  |
 | `--user-agent` + `--user-data-dir`         | Works normally | UA for this session; profile for persistent data                    |
+| `--user-agent` + `--temp-profile`          | Works normally | UA for this session; ephemeral profile                              |
 | `--user-agent` + `--kill-browser`          | **Flag ignored** | No navigation performed                                           |
 | `--user-agent` + skill verb                | **Flag ignored** | Skill modes do not launch a browser                               |
 
