@@ -15,7 +15,6 @@ import (
 
 	"github.com/p3bot/snag/internal/format"
 	"github.com/p3bot/snag/internal/logger"
-	"github.com/p3bot/snag/internal/output"
 )
 
 func URL(urlStr string) (string, error) {
@@ -207,20 +206,20 @@ func Format(name string) error {
 	return nil
 }
 
-func CheckExtensionMismatch(outputFile string, format string) bool {
+func CheckExtensionMismatch(outputFile string, formatName string) bool {
 	if outputFile == "" {
 		return false
 	}
 
 	ext := strings.ToLower(filepath.Ext(outputFile))
-	expectedExt := strings.ToLower(output.GetFileExtension(format))
+	expectedExt := strings.ToLower(format.Extension(formatName))
 
 	if ext != expectedExt {
 		if ext == "" {
-			logger.Warning("Writing %s format to file with no extension: %s", format, outputFile)
+			logger.Warning("Writing %s format to file with no extension: %s", formatName, outputFile)
 			return true
 		}
-		logger.Warning("Writing %s format to file with %s extension: %s", format, ext, outputFile)
+		logger.Warning("Writing %s format to file with %s extension: %s", formatName, ext, outputFile)
 		return true
 	}
 

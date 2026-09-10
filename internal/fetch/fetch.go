@@ -48,25 +48,53 @@ func fetchCanceled(ctx context.Context, err error) error {
 	return nil
 }
 
-func (pf *PageFetcher) Fetch(ctx context.Context, opts FetchOptions) (string, error) {
+func (pf *PageFetcher) begin(ctx context.Context) (context.Context, error) {
 	if pf.page == nil {
-		return "", fmt.Errorf("cannot fetch: page is nil")
+		return ctx, fmt.Errorf("page is nil")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if err := ctx.Err(); err != nil {
-		return "", err
+		return ctx, err
+	}
+	return ctx, nil
+}
+
+// Fetch navigates to opts.URL, waits for the load to settle, then runs Ready.
+func (pf *PageFetcher) Fetch(ctx context.Context, opts FetchOptions) error {
+	ctx, err := pf.begin(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot fetch: %w", err)
 	}
 
 	logger.Verbose("Fetching %s...", opts.URL)
+	if err := pf.navigate(ctx, opts); err != nil {
+		return err
+	}
+	if err := pf.waitStable(ctx); err != nil {
+		return err
+	}
+	return pf.ready(ctx, opts)
+}
 
+// Ready prepares an already-loaded page (optional WaitFor, auth).
+// Tab paths call this instead of navigating; they do not WaitStable.
+func (pf *PageFetcher) Ready(ctx context.Context, opts FetchOptions) error {
+	ctx, err := pf.begin(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot prepare page: %w", err)
+	}
+	return pf.ready(ctx, opts)
+}
+
+func (pf *PageFetcher) navigate(ctx context.Context, opts FetchOptions) error {
 	logger.Verbose("Navigating to %s (timeout: %ds)...", opts.URL, opts.Timeout)
 
 	err := pf.page.NavigateTimeout(opts.URL, pf.timeout)
 	if err != nil {
 		if e := fetchCanceled(ctx, err); e != nil {
-			return "", e
+			return e
 		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			logger.Error("Page load timeout exceeded (%ds)", opts.Timeout)
@@ -74,53 +102,52 @@ func (pf *PageFetcher) Fetch(ctx context.Context, opts FetchOptions) (string, er
 				"The page took too long to load",
 				fmt.Sprintf("snag %s --timeout 60", opts.URL),
 			)
-			return "", ErrPageLoadTimeout
+			return ErrPageLoadTimeout
 		}
-		return "", fmt.Errorf("%w: %w", ErrNavigationFailed, err)
+		return fmt.Errorf("%w: %w", ErrNavigationFailed, err)
 	}
+	return nil
+}
 
+func (pf *PageFetcher) waitStable(ctx context.Context) error {
 	logger.Verbose("Waiting for page to stabilize...")
-	err = pf.page.WaitStable(browser.StabilizeTimeout)
+	err := pf.page.WaitStable(browser.StabilizeTimeout)
 	if err != nil {
 		if e := fetchCanceled(ctx, err); e != nil {
-			return "", e
+			return e
 		}
 		logger.Warning("Page did not stabilize: %v", err)
 	}
+	return nil
+}
 
+func (pf *PageFetcher) ready(ctx context.Context, opts FetchOptions) error {
 	if opts.WaitFor != "" {
-		err := WaitForSelector(ctx, pf.page, opts.WaitFor, pf.timeout)
+		err := waitForSelector(ctx, pf.page, opts.WaitFor, pf.timeout)
 		if err != nil {
 			if e := fetchCanceled(ctx, err); e != nil {
-				return "", e
+				return e
 			}
 			if errors.Is(err, context.DeadlineExceeded) {
+				hintURL := opts.URL
+				if hintURL == "" {
+					hintURL = pf.getURL()
+				}
 				logger.ErrorWithSuggestion(
 					fmt.Sprintf("Selector not found within %ds", opts.Timeout),
-					fmt.Sprintf("snag --wait-for '%s' --timeout 60 %s", opts.WaitFor, opts.URL),
+					fmt.Sprintf("snag --wait-for '%s' --timeout 60 %s", opts.WaitFor, hintURL),
 				)
 			}
-			return "", err
+			return err
 		}
 	}
 
 	if authErr := pf.detectAuth(); authErr != nil {
-		return "", authErr
+		return authErr
 	}
 
-	logger.Verbose("Extracting HTML content...")
-	html, err := pf.page.HTML()
-	if err != nil {
-		if e := fetchCanceled(ctx, err); e != nil {
-			return "", e
-		}
-		return "", fmt.Errorf("failed to extract HTML: %w", err)
-	}
-
-	logger.Debug("Extracted %d bytes of HTML", len(html))
 	logger.Verbose("Fetched successfully")
-
-	return html, nil
+	return nil
 }
 
 func (pf *PageFetcher) detectAuth() error {
@@ -183,7 +210,7 @@ func (pf *PageFetcher) getURL() string {
 	return meta.URL
 }
 
-func WaitForSelector(ctx context.Context, page *browser.Page, selector string, timeout time.Duration) error {
+func waitForSelector(ctx context.Context, page *browser.Page, selector string, timeout time.Duration) error {
 	if page == nil {
 		return fmt.Errorf("cannot wait for selector: page is nil")
 	}

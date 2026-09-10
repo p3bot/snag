@@ -104,27 +104,18 @@ func TestGenerateURLSlug(t *testing.T) {
 	}
 }
 
-// TestGetFileExtension tests format to file extension mapping
-func TestGetFileExtension(t *testing.T) {
-	tests := []struct {
-		format   string
-		expected string
-	}{
-		{format.Markdown, ".md"},
-		{format.HTML, ".html"},
-		{format.Text, ".txt"},
-		{format.PDF, ".pdf"},
-		{format.PNG, ".png"},
-		{"unknown", ".md"}, // Default fallback
-		{"", ".md"},        // Empty fallback
+func TestWrite_File(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "out.md")
+	data := []byte("# hello\n")
+	if err := Write(data, path); err != nil {
+		t.Fatalf("Write: %v", err)
 	}
-
-	for _, tt := range tests {
-		result := GetFileExtension(tt.format)
-		if result != tt.expected {
-			t.Errorf("GetFileExtension(%q) = %q, expected %q",
-				tt.format, result, tt.expected)
-		}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(got) != string(data) {
+		t.Fatalf("got %q, want %q", got, data)
 	}
 }
 

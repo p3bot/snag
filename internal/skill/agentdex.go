@@ -48,8 +48,43 @@ type AgentRoots struct {
 	Shared  string
 }
 
-// HasSkillsConcept reports whether agentdex resolved any skills path data.
-func HasSkillsConcept(a agentdex.Agent) bool {
+// Catalog is an open agentdex index. Callers outside this package do not import agentdex.
+type Catalog struct {
+	idx *agentdex.Index
+}
+
+// Agent is a catalogued agent with skills-path data resolved by agentdex.
+type Agent struct {
+	ID    string
+	inner agentdex.Agent
+}
+
+// Roots returns Primary / Native / Shared roots at loc.
+func (a Agent) Roots(loc Location) AgentRoots {
+	return rootsAt(a.inner, loc)
+}
+
+// OpenConfig is the test seam for catalog dir, cache, HOME, and binary lookup.
+// Production Open uses agentdex defaults.
+type OpenConfig struct {
+	CatalogDir string
+	CacheDir   string
+	Home       string
+	SearchDirs []string
+	LookPath   func(string) (string, error)
+}
+
+var testOpen *OpenConfig
+
+// SetTestOpen installs OpenConfig for subsequent Open calls. Pass nil to clear.
+// The returned function restores the previous config.
+func SetTestOpen(c *OpenConfig) func() {
+	prev := testOpen
+	testOpen = c
+	return func() { testOpen = prev }
+}
+
+func hasSkillsConcept(a agentdex.Agent) bool {
 	return !skillsPathsZero(a.Detection.Skills)
 }
 
@@ -64,9 +99,7 @@ func skillsScopeZero(sc agentdex.SkillsScope) bool {
 		sc.Primary.Path == "" && !sc.Primary.Exists
 }
 
-// RootsAt extracts Primary / Native / Shared (agents role) absolute paths
-// for the given location. Paths are cleaned; empty means unset.
-func RootsAt(a agentdex.Agent, loc Location) AgentRoots {
+func rootsAt(a agentdex.Agent, loc Location) AgentRoots {
 	sc := a.Detection.Skills.Global
 	if loc == LocationLocal {
 		sc = a.Detection.Skills.Local
@@ -98,14 +131,47 @@ func InstallRoot(r AgentRoots, named bool) string {
 	return r.Shared
 }
 
-// OpenIndex constructs an agentdex Index for skill path operations.
-// workingDir is applied last so the CLI's Getwd vs "/" fallback is not
-// overwritten by test seams that also pass WithWorkingDir.
-func OpenIndex(workingDir string, extra ...agentdex.Option) (*agentdex.Index, error) {
-	opts := make([]agentdex.Option, 0, 1+len(extra))
-	opts = append(opts, extra...)
+func wrapAgents(in []agentdex.Agent) []Agent {
+	out := make([]Agent, len(in))
+	for i, a := range in {
+		out[i] = Agent{ID: a.ID, inner: a}
+	}
+	return out
+}
+
+// Open constructs a Catalog. workingDir is applied last so Getwd vs "/" is
+// not overwritten by test seams that also set a working directory.
+func Open(workingDir string) (*Catalog, error) {
+	opts := make([]agentdex.Option, 0, 8)
+	if testOpen != nil {
+		if testOpen.CatalogDir != "" {
+			opts = append(opts, agentdex.WithCatalogDir(testOpen.CatalogDir))
+		}
+		if testOpen.CacheDir != "" {
+			opts = append(opts, agentdex.WithCacheDir(testOpen.CacheDir))
+		}
+		if testOpen.Home != "" {
+			home := testOpen.Home
+			opts = append(opts, agentdex.WithEnvLookup(func(k string) (string, bool) {
+				if k == "HOME" {
+					return home, true
+				}
+				return "", false
+			}))
+		}
+		if testOpen.LookPath != nil {
+			opts = append(opts, agentdex.WithLookPath(testOpen.LookPath))
+		}
+		if len(testOpen.SearchDirs) > 0 {
+			opts = append(opts, agentdex.WithSearchDirs(testOpen.SearchDirs...))
+		}
+	}
 	opts = append(opts, agentdex.WithWorkingDir(workingDir))
-	return agentdex.Open(opts...)
+	idx, err := agentdex.Open(opts...)
+	if err != nil {
+		return nil, MapCatalogError(err)
+	}
+	return &Catalog{idx: idx}, nil
 }
 
 // MapCatalogError turns agentdex catalog sentinels into a user-facing error
@@ -125,40 +191,40 @@ func MapCatalogError(err error) error {
 }
 
 // DefaultSet returns agents with Found and a skills concept.
-func DefaultSet(ctx context.Context, idx *agentdex.Index) ([]agentdex.Agent, error) {
-	res, err := idx.Agents.List(ctx, agentdex.AgentQuery{
+func DefaultSet(ctx context.Context, cat *Catalog) ([]Agent, error) {
+	res, err := cat.idx.Agents.List(ctx, agentdex.AgentQuery{
 		Installed: true,
 		Enrich:    agentdex.EnrichNone,
 	})
 	if err != nil {
 		return nil, MapCatalogError(err)
 	}
-	out := make([]agentdex.Agent, 0, len(res.Items))
+	var out []agentdex.Agent
 	for _, a := range res.Items {
-		if HasSkillsConcept(a) {
+		if hasSkillsConcept(a) {
 			out = append(out, a)
 		}
 	}
-	return out, nil
+	return wrapAgents(out), nil
 }
 
 // ResolveExplicit loads each id via Get (paths resolve even when !Found).
-func ResolveExplicit(ctx context.Context, idx *agentdex.Index, ids []string) ([]agentdex.Agent, error) {
+func ResolveExplicit(ctx context.Context, cat *Catalog, ids []string) ([]Agent, error) {
 	out := make([]agentdex.Agent, 0, len(ids))
 	for _, id := range ids {
-		d, err := idx.Agents.Get(ctx, id, agentdex.AgentGetQuery{Enrich: agentdex.EnrichNone})
+		d, err := cat.idx.Agents.Get(ctx, id, agentdex.AgentGetQuery{Enrich: agentdex.EnrichNone})
 		if err != nil {
 			if errors.Is(err, agentdex.ErrAgentUnknown) {
 				return nil, fmt.Errorf("%w %q", ErrUnknownAgent, id)
 			}
 			return nil, MapCatalogError(err)
 		}
-		if !HasSkillsConcept(d.Agent) {
+		if !hasSkillsConcept(d.Agent) {
 			return nil, fmt.Errorf("%w: %q", ErrNoSkillsConcept, id)
 		}
 		out = append(out, d.Agent)
 	}
-	return out, nil
+	return wrapAgents(out), nil
 }
 
 // NoWritablePathError returns ErrNoWritablePath wrapped with the agent id.

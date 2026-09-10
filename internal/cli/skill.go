@@ -13,7 +13,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/p3bot/agentdex"
 	"github.com/spf13/cobra"
 
 	"github.com/p3bot/snag/internal/logger"
@@ -25,10 +24,7 @@ import (
 // cannot collide with a typed --skill-install=id.
 const skillBareSentinel = "\x00"
 
-var (
-	skillAgentdexOpts []agentdex.Option
-	skillGetwd        = os.Getwd
-)
+var skillGetwd = os.Getwd
 
 func skillFlagsChanged(cmd *cobra.Command) bool {
 	return skillPrint ||
@@ -157,7 +153,7 @@ func skillLocation(local bool) skill.Location {
 	return skill.LocationGlobal
 }
 
-func openSkillIndex(local bool) (*agentdex.Index, error) {
+func openSkillCatalog(local bool) (*skill.Catalog, error) {
 	wd, err := skillGetwd()
 	if err != nil {
 		if local {
@@ -165,25 +161,25 @@ func openSkillIndex(local bool) (*agentdex.Index, error) {
 		}
 		wd = "/"
 	}
-	return skill.OpenIndex(wd, skillAgentdexOpts...)
+	return skill.Open(wd)
 }
 
 func runSkillInstall(cmd *cobra.Command, ctx context.Context, agentIDs []string, named, local bool) error {
-	idx, err := openSkillIndex(local)
+	cat, err := openSkillCatalog(local)
 	if err != nil {
 		return err
 	}
 	loc := skillLocation(local)
 
-	var agents []agentdex.Agent
+	var agents []skill.Agent
 	if named {
-		agents, err = skill.ResolveExplicit(ctx, idx, agentIDs)
+		agents, err = skill.ResolveExplicit(ctx, cat, agentIDs)
 		if err != nil {
 			logger.Error("%s", err.Error())
 			return err
 		}
 	} else {
-		agents, err = skill.DefaultSet(ctx, idx)
+		agents, err = skill.DefaultSet(ctx, cat)
 		if err != nil {
 			return err
 		}
@@ -196,7 +192,7 @@ func runSkillInstall(cmd *cobra.Command, ctx context.Context, agentIDs []string,
 	seen := make(map[string]struct{})
 	var order []string
 	for _, a := range agents {
-		r := skill.RootsAt(a, loc)
+		r := a.Roots(loc)
 		root := skill.InstallRoot(r, named)
 		if root == "" {
 			if named {
@@ -229,19 +225,19 @@ func runSkillInstall(cmd *cobra.Command, ctx context.Context, agentIDs []string,
 }
 
 func runSkillList(cmd *cobra.Command, ctx context.Context, local bool) error {
-	idx, err := openSkillIndex(local)
+	cat, err := openSkillCatalog(local)
 	if err != nil {
 		return err
 	}
 	loc := skillLocation(local)
 
-	agents, err := skill.DefaultSet(ctx, idx)
+	agents, err := skill.DefaultSet(ctx, cat)
 	if err != nil {
 		return err
 	}
 	claimers := make(map[string][]string)
 	for _, a := range agents {
-		r := skill.RootsAt(a, loc)
+		r := a.Roots(loc)
 		for _, p := range skill.Candidates(r) {
 			if !skill.Present(p) {
 				continue
@@ -265,21 +261,21 @@ func runSkillList(cmd *cobra.Command, ctx context.Context, local bool) error {
 }
 
 func runSkillUninstall(cmd *cobra.Command, ctx context.Context, agentIDs []string, named, local bool) error {
-	idx, err := openSkillIndex(local)
+	cat, err := openSkillCatalog(local)
 	if err != nil {
 		return err
 	}
 	loc := skillLocation(local)
 
-	var sAgents []agentdex.Agent
+	var sAgents []skill.Agent
 	if named {
-		sAgents, err = skill.ResolveExplicit(ctx, idx, agentIDs)
+		sAgents, err = skill.ResolveExplicit(ctx, cat, agentIDs)
 		if err != nil {
 			logger.Error("%s", err.Error())
 			return err
 		}
 	} else {
-		sAgents, err = skill.DefaultSet(ctx, idx)
+		sAgents, err = skill.DefaultSet(ctx, cat)
 		if err != nil {
 			return err
 		}
@@ -289,13 +285,13 @@ func runSkillUninstall(cmd *cobra.Command, ctx context.Context, agentIDs []strin
 		}
 	}
 
-	var rAgents []agentdex.Agent
+	var rAgents []skill.Agent
 	if named {
 		sIDs := make(map[string]struct{}, len(sAgents))
 		for _, a := range sAgents {
 			sIDs[a.ID] = struct{}{}
 		}
-		defaultSet, err := skill.DefaultSet(ctx, idx)
+		defaultSet, err := skill.DefaultSet(ctx, cat)
 		if err != nil {
 			return err
 		}
@@ -308,7 +304,7 @@ func runSkillUninstall(cmd *cobra.Command, ctx context.Context, agentIDs []strin
 
 	rClaim := make(map[string][]string)
 	for _, a := range rAgents {
-		r := skill.RootsAt(a, loc)
+		r := a.Roots(loc)
 		for _, p := range skill.Candidates(r) {
 			rClaim[p] = append(rClaim[p], a.ID)
 		}
@@ -316,7 +312,7 @@ func runSkillUninstall(cmd *cobra.Command, ctx context.Context, agentIDs []strin
 
 	pathSet := make(map[string]struct{})
 	for _, a := range sAgents {
-		r := skill.RootsAt(a, loc)
+		r := a.Roots(loc)
 		for _, p := range skill.Candidates(r) {
 			pathSet[p] = struct{}{}
 		}

@@ -13,7 +13,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -100,7 +99,7 @@ func handleInfoFromURL(cmd *cobra.Command, urlStr string) error {
 	}
 
 	fetcher := fetch.NewPageFetcher(page, timeout)
-	_, err = fetcher.Fetch(ctx, fetch.FetchOptions{
+	err = fetcher.Fetch(ctx, fetch.FetchOptions{
 		URL:     validatedURL,
 		Timeout: timeout,
 		WaitFor: validatedWaitFor,
@@ -186,17 +185,16 @@ func handleInfoFromTab(cmd *cobra.Command) error {
 		page = matchedPages[0]
 	}
 
-	if cmd.Flags().Changed("wait-for") {
-		validatedWaitFor := validate.WaitFor(waitFor, true)
-		if validatedWaitFor != "" {
-			err := fetch.WaitForSelector(ctx, page, validatedWaitFor, time.Duration(timeout)*time.Second)
-			if err != nil {
-				if e := abortErr(ctx, err); e != nil {
-					return e
-				}
-				return err
-			}
+	validatedWaitFor := validate.WaitFor(waitFor, cmd.Flags().Changed("wait-for"))
+	fetcher := fetch.NewPageFetcher(page, timeout)
+	if err := fetcher.Ready(ctx, fetch.FetchOptions{
+		Timeout: timeout,
+		WaitFor: validatedWaitFor,
+	}); err != nil {
+		if e := abortErr(ctx, err); e != nil {
+			return e
 		}
+		return err
 	}
 
 	pageInfo, err := fetch.ExtractPageInfo(page)

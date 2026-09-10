@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -22,10 +21,7 @@ import (
 
 	"github.com/p3bot/snag/internal/browser"
 	"github.com/p3bot/snag/internal/doctor"
-	"github.com/p3bot/snag/internal/fetch"
-	"github.com/p3bot/snag/internal/format"
 	"github.com/p3bot/snag/internal/logger"
-	"github.com/p3bot/snag/internal/output"
 	"github.com/p3bot/snag/internal/validate"
 )
 
@@ -66,78 +62,10 @@ func snag(ctx context.Context, config *Config) error {
 		defer bm.ClosePage(page)
 	}
 
-	fetcher := fetch.NewPageFetcher(page, config.Timeout)
-
-	_, err = fetcher.Fetch(ctx, fetch.FetchOptions{
-		URL:     config.URL,
-		Timeout: config.Timeout,
-		WaitFor: config.WaitFor,
-	})
-	if err != nil {
-		if e := abortErr(ctx, err); e != nil {
-			return e
-		}
+	if err := preparePage(ctx, page, config, config.URL); err != nil {
 		return err
 	}
-
-	if config.OutputDir != "" {
-		info, err := page.Meta()
-		if err != nil {
-			if e := abortErr(ctx, err); e != nil {
-				return e
-			}
-			return fmt.Errorf("failed to get page info: %w", err)
-		}
-
-		config.OutputFile, err = generateOutputFilename(
-			info.Title, config.URL, config.Format,
-			time.Now(), config.OutputDir,
-		)
-		if err != nil {
-			return err
-		}
-	}
-
-	// For binary formats without -o or -d: auto-generate filename in current directory
-	// Binary formats (PDF, PNG) should NEVER output to stdout (corrupts terminal)
-	if config.OutputFile == "" && (config.Format == format.PDF || config.Format == format.PNG) {
-		info, err := page.Meta()
-		if err != nil {
-			if e := abortErr(ctx, err); e != nil {
-				return e
-			}
-			return fmt.Errorf("failed to get page info: %w", err)
-		}
-
-		config.OutputFile, err = generateOutputFilename(
-			info.Title, config.URL, config.Format,
-			time.Now(), ".",
-		)
-		if err != nil {
-			return err
-		}
-		logger.Info("Filename: %s", config.OutputFile)
-	}
-
-	if err := format.ProcessContent(page, config.Format, config.OutputFile); err != nil {
-		if e := abortErr(ctx, err); e != nil {
-			return e
-		}
-		return err
-	}
-	return nil
-}
-
-func generateOutputFilename(title, url, format string,
-	timestamp time.Time, outputDir string) (string, error) {
-	filename := output.GenerateFilename(title, format, timestamp, url)
-
-	finalFilename, err := output.ResolveConflict(outputDir, filename)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve filename conflict: %w", err)
-	}
-
-	return filepath.Join(outputDir, finalFilename), nil
+	return emitPage(ctx, page, config, config.URL, time.Now())
 }
 
 func connectToExistingBrowser(ctx context.Context, port int) (*browser.BrowserManager, error) {
@@ -247,12 +175,6 @@ func handleListTabs(cmd *cobra.Command) error {
 }
 
 func handleAllTabs(cmd *cobra.Command) error {
-	outputFormat := validate.NormalizeFormat(flagFormat)
-	outDir := strings.TrimSpace(outputDir)
-	if outDir == "" {
-		outDir = "."
-	}
-
 	if cmd.Flags().Changed("user-agent") {
 		logger.Warning("--user-agent is ignored with --all-tabs (cannot change existing tabs' user agents)")
 	}
@@ -261,25 +183,18 @@ func handleAllTabs(cmd *cobra.Command) error {
 		logger.Warning("--timeout is ignored without --wait-for when using --all-tabs")
 	}
 
-	if err := validate.Format(outputFormat); err != nil {
-		return err
-	}
-
-	if err := validate.Timeout(timeout); err != nil {
-		return err
-	}
-
-	if err := validate.Directory(outDir); err != nil {
-		return err
-	}
-
-	ctx := cmd.Context()
-	bm, err := connectToExistingBrowser(ctx, port)
+	cfg, err := newEmitConfig(cmd, true)
 	if err != nil {
 		return err
 	}
 
-	tabs, err := bm.ListTabs()
+	ctx := cmd.Context()
+	bm, err := connectToExistingBrowser(ctx, cfg.Port)
+	if err != nil {
+		return err
+	}
+
+	pages, err := bm.GetPages()
 	if err != nil {
 		if e := abortErr(ctx, err); e != nil {
 			return e
@@ -287,94 +202,13 @@ func handleAllTabs(cmd *cobra.Command) error {
 		return err
 	}
 
-	if len(tabs) == 0 {
+	if len(pages) == 0 {
 		logger.Info("No tabs open in browser")
 		return nil
 	}
 
-	timestamp := time.Now()
-
-	logger.Verbose("Processing %d tabs...", len(tabs))
-
-	successCount := 0
-	failureCount := 0
-
-	for _, tab := range tabs {
-		if e := abortErr(ctx, nil); e != nil {
-			return e
-		}
-		if validate.IsNonFetchableURL(tab.URL) {
-			logger.Warning("[%d/%d] Skipping tab: %s (not fetchable)", tab.Index, len(tabs), tab.URL)
-			continue
-		}
-
-		logger.Verbose("[%d/%d] Processing: %s", tab.Index, len(tabs), tab.URL)
-
-		page, err := bm.GetTabByIndex(tab.Index)
-		if err != nil {
-			if e := abortErr(ctx, err); e != nil {
-				return e
-			}
-			logger.Error("[%d/%d] Failed to get tab: %v", tab.Index, len(tabs), err)
-			failureCount++
-			continue
-		}
-
-		if waitFor != "" {
-			err := fetch.WaitForSelector(ctx, page, waitFor, time.Duration(timeout)*time.Second)
-			if err != nil {
-				if e := abortErr(ctx, err); e != nil {
-					return e
-				}
-				logger.Error("[%d/%d] Wait failed: %v", tab.Index, len(tabs), err)
-				failureCount++
-				continue
-			}
-		}
-
-		outputPath, err := generateOutputFilename(
-			tab.Title, tab.URL, outputFormat,
-			timestamp, outDir,
-		)
-		if err != nil {
-			logger.Error("[%d/%d] Failed to generate filename: %v", tab.Index, len(tabs), err)
-			failureCount++
-			continue
-		}
-
-		if err := format.ProcessContent(page, outputFormat, outputPath); err != nil {
-			if e := abortErr(ctx, err); e != nil {
-				return e
-			}
-			logger.Error("[%d/%d] Failed to process content: %v", tab.Index, len(tabs), err)
-			failureCount++
-			if closeTab {
-				if err := page.Close(); err != nil {
-					logger.Verbose("[%d/%d] Failed to close tab: %v", tab.Index, len(tabs), err)
-				}
-			}
-			continue
-		}
-
-		successCount++
-
-		if closeTab {
-			if tab.Index == len(tabs) {
-				logger.Info("Closing last tab, browser will close")
-			}
-			if err := page.Close(); err != nil {
-				logger.Verbose("[%d/%d] Failed to close tab: %v", tab.Index, len(tabs), err)
-			}
-		}
-	}
-
-	logger.Verbose("Batch complete: %d succeeded, %d failed", successCount, failureCount)
-
-	if failureCount > 0 {
-		return fmt.Errorf("batch processing completed with %d failures", failureCount)
-	}
-
-	return nil
+	logger.Verbose("Processing %d tabs...", len(pages))
+	return processBatchTabs(ctx, bm, pages, cfg)
 }
 
 func handleTabFetch(cmd *cobra.Command) error {
@@ -392,28 +226,13 @@ func handleTabFetch(cmd *cobra.Command) error {
 		logger.Warning("--timeout is ignored without --wait-for when using --tab")
 	}
 
-	// Validate early before expensive browser connection
-	outputFormat := validate.NormalizeFormat(flagFormat)
-	validatedWaitFor := validate.WaitFor(waitFor, cmd.Flags().Changed("wait-for"))
-	outputFile := strings.TrimSpace(flagOutput)
-
-	if err := validate.Format(outputFormat); err != nil {
+	cfg, err := newEmitConfig(cmd, false)
+	if err != nil {
 		return err
-	}
-
-	if err := validate.Timeout(timeout); err != nil {
-		return err
-	}
-
-	if outputFile != "" {
-		if err := validate.OutputPath(outputFile); err != nil {
-			return err
-		}
-		validate.CheckExtensionMismatch(outputFile, outputFormat)
 	}
 
 	ctx := cmd.Context()
-	bm, err := connectToExistingBrowser(ctx, port)
+	bm, err := connectToExistingBrowser(ctx, cfg.Port)
 	if err != nil {
 		return err
 	}
@@ -431,7 +250,10 @@ func handleTabFetch(cmd *cobra.Command) error {
 					return ErrOutputFlagConflict
 				}
 
-				return handleTabRange(cmd, ctx, bm, start, end)
+				if err := cfg.requireAutoDir(); err != nil {
+					return err
+				}
+				return handleTabRange(ctx, bm, start, end, cfg)
 			}
 		}
 	}
@@ -485,10 +307,12 @@ func handleTabFetch(cmd *cobra.Command) error {
 	}
 
 	if multipleMatches {
-		return handleTabPatternBatch(cmd, ctx, bm, matchedPages, tabValue)
+		if err := cfg.requireAutoDir(); err != nil {
+			return err
+		}
+		return handleTabPatternBatch(ctx, bm, matchedPages, tabValue, cfg)
 	}
 
-	// Single tab fetch (validation already done earlier)
 	info, err := page.Meta()
 	if err != nil {
 		if e := abortErr(ctx, err); e != nil {
@@ -499,36 +323,19 @@ func handleTabFetch(cmd *cobra.Command) error {
 
 	logger.Verbose("Fetching content from: %s", info.URL)
 
-	if validatedWaitFor != "" {
-		err := fetch.WaitForSelector(ctx, page, validatedWaitFor, time.Duration(timeout)*time.Second)
-		if err != nil {
-			if e := abortErr(ctx, err); e != nil {
-				return e
-			}
-			return err
+	if err := preparePage(ctx, page, cfg, ""); err != nil {
+		return err
+	}
+	if err := emitPage(ctx, page, cfg, info.URL, time.Now()); err != nil {
+		if cfg.CloseTab {
+			closeExistingTab(bm, page)
 		}
+		return err
 	}
-
-	// For binary formats without -o or -d: auto-generate filename
-	if outputFile == "" && (outputFormat == format.PDF || outputFormat == format.PNG) {
-		outputFile, err = generateOutputFilename(
-			info.Title, info.URL, outputFormat,
-			time.Now(), ".",
-		)
-		if err != nil {
-			return err
-		}
-		logger.Info("Filename: %s", outputFile)
-	}
-
-	err = format.ProcessContent(page, outputFormat, outputFile)
-	if e := abortErr(ctx, err); e != nil {
-		return e
-	}
-	if closeTab {
+	if cfg.CloseTab {
 		closeExistingTab(bm, page)
 	}
-	return err
+	return nil
 }
 
 // closeExistingTab closes a tab in an attached browser. Close failures are
@@ -550,101 +357,7 @@ func closeExistingTab(bm *browser.BrowserManager, page *browser.Page) {
 	}
 }
 
-func processBatchTabs(ctx context.Context, bm *browser.BrowserManager, pages []*browser.Page, config *Config) error {
-	timestamp := time.Now()
-
-	successCount := 0
-	failureCount := 0
-
-	for i, page := range pages {
-		if e := abortErr(ctx, nil); e != nil {
-			return e
-		}
-		current := i + 1
-		total := len(pages)
-
-		info, err := page.Meta()
-		if err != nil {
-			if e := abortErr(ctx, err); e != nil {
-				return e
-			}
-			logger.Error("[%d/%d] Failed to get tab info: %v", current, total, err)
-			failureCount++
-			continue
-		}
-
-		logger.Verbose("[%d/%d] Processing: %s", current, total, info.URL)
-
-		if config.WaitFor != "" {
-			err := fetch.WaitForSelector(ctx, page, config.WaitFor, time.Duration(config.Timeout)*time.Second)
-			if err != nil {
-				if e := abortErr(ctx, err); e != nil {
-					return e
-				}
-				logger.Error("[%d/%d] Wait failed: %v", current, total, err)
-				failureCount++
-				continue
-			}
-		}
-
-		outputPath, err := generateOutputFilename(
-			info.Title, info.URL, config.Format,
-			timestamp, config.OutputDir,
-		)
-		if err != nil {
-			logger.Error("[%d/%d] Failed to generate filename: %v", current, total, err)
-			failureCount++
-			continue
-		}
-
-		if err := format.ProcessContent(page, config.Format, outputPath); err != nil {
-			if e := abortErr(ctx, err); e != nil {
-				return e
-			}
-			logger.Error("[%d/%d] Failed to process content: %v", current, total, err)
-			failureCount++
-			if config.CloseTab {
-				closeExistingTab(bm, page)
-			}
-			continue
-		}
-
-		successCount++
-
-		if config.CloseTab {
-			closeExistingTab(bm, page)
-		}
-	}
-
-	logger.Verbose("Batch complete: %d succeeded, %d failed", successCount, failureCount)
-
-	if failureCount > 0 {
-		return fmt.Errorf("batch processing completed with %d failures", failureCount)
-	}
-
-	return nil
-}
-
-func handleTabRange(cmd *cobra.Command, ctx context.Context, bm *browser.BrowserManager, start, end int) error {
-	outputFormat := validate.NormalizeFormat(flagFormat)
-	validatedWaitFor := validate.WaitFor(waitFor, cmd.Flags().Changed("wait-for"))
-	outDir := strings.TrimSpace(outputDir)
-	if outDir == "" {
-		outDir = "."
-	}
-
-	if err := validate.Format(outputFormat); err != nil {
-		return err
-	}
-
-	if err := validate.Timeout(timeout); err != nil {
-		return err
-	}
-
-	if err := validate.Directory(outDir); err != nil {
-		return err
-	}
-
+func handleTabRange(ctx context.Context, bm *browser.BrowserManager, start, end int, cfg *Config) error {
 	pages, err := bm.GetTabsByRange(start, end)
 	if err != nil {
 		if e := abortErr(ctx, err); e != nil {
@@ -656,49 +369,12 @@ func handleTabRange(cmd *cobra.Command, ctx context.Context, bm *browser.Browser
 	}
 
 	logger.Verbose("Processing %d tabs from range [%d-%d]...", len(pages), start, end)
-
-	config := &Config{
-		Format:    outputFormat,
-		WaitFor:   validatedWaitFor,
-		Timeout:   timeout,
-		OutputDir: outDir,
-		CloseTab:  closeTab,
-	}
-
-	return processBatchTabs(ctx, bm, pages, config)
+	return processBatchTabs(ctx, bm, pages, cfg)
 }
 
-func handleTabPatternBatch(cmd *cobra.Command, ctx context.Context, bm *browser.BrowserManager, pages []*browser.Page, pattern string) error {
-	outputFormat := validate.NormalizeFormat(flagFormat)
-	validatedWaitFor := validate.WaitFor(waitFor, cmd.Flags().Changed("wait-for"))
-	outDir := strings.TrimSpace(outputDir)
-	if outDir == "" {
-		outDir = "."
-	}
-
-	if err := validate.Format(outputFormat); err != nil {
-		return err
-	}
-
-	if err := validate.Timeout(timeout); err != nil {
-		return err
-	}
-
-	if err := validate.Directory(outDir); err != nil {
-		return err
-	}
-
+func handleTabPatternBatch(ctx context.Context, bm *browser.BrowserManager, pages []*browser.Page, pattern string, cfg *Config) error {
 	logger.Verbose("Processing %d tabs matching pattern '%s'...", len(pages), pattern)
-
-	config := &Config{
-		Format:    outputFormat,
-		WaitFor:   validatedWaitFor,
-		Timeout:   timeout,
-		OutputDir: outDir,
-		CloseTab:  closeTab,
-	}
-
-	return processBatchTabs(ctx, bm, pages, config)
+	return processBatchTabs(ctx, bm, pages, cfg)
 }
 
 func handleOpenURLsInBrowser(cmd *cobra.Command, urls []string) error {
@@ -791,42 +467,18 @@ func handleOpenURLsInBrowser(cmd *cobra.Command, urls []string) error {
 }
 
 func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
-	outputFile := strings.TrimSpace(flagOutput)
-	outDir := strings.TrimSpace(outputDir)
-
-	outputFormat := validate.NormalizeFormat(flagFormat)
-	if err := validate.Format(outputFormat); err != nil {
+	cfg, err := newEmitConfig(cmd, true)
+	if err != nil {
 		return err
-	}
-
-	if err := validate.Timeout(timeout); err != nil {
-		return err
-	}
-
-	if err := validate.Port(port); err != nil {
-		return err
-	}
-
-	if outputFile != "" {
-		if err := validate.OutputPath(outputFile); err != nil {
-			return err
-		}
-	}
-
-	if cmd.Flags().Changed("output-dir") && outDir == "" {
-		outDir = "."
-	}
-
-	if outDir != "" {
-		if err := validate.Directory(outDir); err != nil {
-			return err
-		}
 	}
 
 	opts, err := browserOptionsFromFlags(cmd, false, forceHead)
 	if err != nil {
 		return err
 	}
+	cfg.UserAgent = opts.UserAgent
+	cfg.UserDataDir = opts.UserDataDir
+	cfg.TempProfile = opts.TempProfile
 
 	var validatedURLs []string
 	for _, urlStr := range urls {
@@ -857,98 +509,11 @@ func handleMultipleURLs(cmd *cobra.Command, urls []string) error {
 		return err
 	}
 
-	if closeTab && forceHead {
+	if cfg.CloseTab && cfg.ForceHeadless {
 		logger.Warning("--close-tab is ignored in headless mode (tabs close automatically)")
 	}
 
-	validatedWaitFor := validate.WaitFor(waitFor, cmd.Flags().Changed("wait-for"))
-
-	timestamp := time.Now()
-
-	successCount := 0
-	failureCount := 0
-
-	for i, validatedURL := range validatedURLs {
-		if e := abortErr(ctx, nil); e != nil {
-			return e
-		}
-		current := i + 1
-		total := len(validatedURLs)
-
-		logger.Verbose("[%d/%d] Fetching: %s", current, total, validatedURL)
-
-		page, err := bm.NewPage()
-		if err != nil {
-			if e := abortErr(ctx, err); e != nil {
-				return e
-			}
-			logger.Error("[%d/%d] Failed to create page: %v", current, total, err)
-			failureCount++
-			continue
-		}
-
-		fetcher := fetch.NewPageFetcher(page, timeout)
-		_, err = fetcher.Fetch(ctx, fetch.FetchOptions{
-			URL:     validatedURL,
-			Timeout: timeout,
-			WaitFor: validatedWaitFor,
-		})
-		if err != nil {
-			if e := abortErr(ctx, err); e != nil {
-				return e
-			}
-			logger.Error("[%d/%d] Failed to fetch: %v", current, total, err)
-			bm.ClosePage(page)
-			failureCount++
-			continue
-		}
-
-		info, err := page.Meta()
-		if err != nil {
-			if e := abortErr(ctx, err); e != nil {
-				return e
-			}
-			logger.Error("[%d/%d] Failed to get page info: %v", current, total, err)
-			bm.ClosePage(page)
-			failureCount++
-			continue
-		}
-
-		outputPath, err := generateOutputFilename(
-			info.Title, validatedURL, outputFormat,
-			timestamp, outDir,
-		)
-		if err != nil {
-			logger.Error("[%d/%d] Failed to generate filename: %v", current, total, err)
-			bm.ClosePage(page)
-			failureCount++
-			continue
-		}
-
-		if err := format.ProcessContent(page, outputFormat, outputPath); err != nil {
-			if e := abortErr(ctx, err); e != nil {
-				return e
-			}
-			logger.Error("[%d/%d] Failed to save content: %v", current, total, err)
-			bm.ClosePage(page)
-			failureCount++
-			continue
-		}
-
-		if bm.LaunchedHeadless() || closeTab {
-			bm.ClosePage(page)
-		}
-
-		successCount++
-	}
-
-	logger.Verbose("Batch complete: %d succeeded, %d failed", successCount, failureCount)
-
-	if failureCount > 0 {
-		return fmt.Errorf("batch processing completed with %d failures", failureCount)
-	}
-
-	return nil
+	return processBatchURLs(ctx, bm, validatedURLs, cfg)
 }
 
 func plural(n int) string {

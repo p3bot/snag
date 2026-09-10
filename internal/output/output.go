@@ -24,7 +24,11 @@ var (
 	slugMultipleHyphens = regexp.MustCompile(`-+`)
 )
 
-const MaxSlugLength = 80
+const (
+	MaxSlugLength   = 80
+	DefaultFileMode = 0644
+	bytesPerKB      = 1024.0
+)
 
 func SlugifyTitle(title string, maxLen int) string {
 	slug := strings.ToLower(title)
@@ -66,23 +70,6 @@ func GenerateURLSlug(urlStr string) string {
 	return slug
 }
 
-func GetFileExtension(name string) string {
-	switch name {
-	case format.Markdown:
-		return ".md"
-	case format.HTML:
-		return ".html"
-	case format.Text:
-		return ".txt"
-	case format.PDF:
-		return ".pdf"
-	case format.PNG:
-		return ".png"
-	default:
-		return ".md"
-	}
-}
-
 func GenerateFilename(title string, name string, timestamp time.Time, urlStr string) string {
 	timePrefix := timestamp.Format("2006-01-02-150405")
 
@@ -94,7 +81,7 @@ func GenerateFilename(title string, name string, timestamp time.Time, urlStr str
 		logger.Debug("Empty title slug, using URL slug: %s", titleSlug)
 	}
 
-	ext := GetFileExtension(name)
+	ext := format.Extension(name)
 
 	filename := fmt.Sprintf("%s-%s%s", timePrefix, titleSlug, ext)
 	logger.Debug("Generated filename: %s", filename)
@@ -134,4 +121,34 @@ func ResolveConflict(dir, filename string) (string, error) {
 
 		counter++
 	}
+}
+
+// Write sends data to path, or to stdout when path is empty.
+func Write(data []byte, path string) error {
+	if path == "" {
+		return writeStdout(data)
+	}
+	return writeFile(data, path)
+}
+
+func writeStdout(data []byte) error {
+	logger.Verbose("Writing to stdout...")
+	if _, err := os.Stdout.Write(data); err != nil {
+		return fmt.Errorf("failed to write to stdout: %w", err)
+	}
+	logger.Debug("Wrote %d bytes to stdout", len(data))
+	return nil
+}
+
+func writeFile(data []byte, filename string) error {
+	logger.Verbose("Writing to file: %s", filename)
+	if _, err := os.Stat(filename); err == nil {
+		logger.Verbose("Overwriting existing file: %s", filename)
+	}
+	if err := os.WriteFile(filename, data, DefaultFileMode); err != nil {
+		return fmt.Errorf("failed to write to file %s: %w", filename, err)
+	}
+	sizeKB := float64(len(data)) / bytesPerKB
+	logger.Success("Saved to %s (%.1f KB)", filename, sizeKB)
+	return nil
 }

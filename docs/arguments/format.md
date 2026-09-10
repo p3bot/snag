@@ -195,8 +195,9 @@ snag https://example.com --format text -o file      # ⚠️ No extension
 
 - Flag definition: `internal/cli/root.go` (`init`)
 - Format validation: `internal/validate` (`Format`, `NormalizeFormat`)
-- Format conversion: `internal/format` (`ProcessContent`)
-- Extension mapping: Output generation functions
+- Format conversion: `internal/format` (`Render`)
+- File and stdout write: `internal/output` (`Write`)
+- Extension mapping: `internal/format` (`Extension`)
 
 **Format Conversion Flow:**
 

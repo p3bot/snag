@@ -33,17 +33,27 @@ func TestFetchAlreadyCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	pf := NewPageFetcher(&browser.Page{}, 1)
-	_, err := pf.Fetch(ctx, FetchOptions{URL: "https://example.com", Timeout: 1})
+	err := pf.Fetch(ctx, FetchOptions{URL: "https://example.com", Timeout: 1})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Fetch on cancelled ctx: %v", err)
+	}
+}
+
+func TestReadyAlreadyCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	pf := NewPageFetcher(&browser.Page{}, 1)
+	err := pf.Ready(ctx, FetchOptions{Timeout: 1})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Ready on cancelled ctx: %v", err)
 	}
 }
 
 func TestWaitForSelectorAlreadyCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	err := WaitForSelector(ctx, &browser.Page{}, "body", time.Second)
+	err := waitForSelector(ctx, &browser.Page{}, "body", time.Second)
 	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("WaitForSelector on cancelled ctx: %v", err)
+		t.Fatalf("waitForSelector on cancelled ctx: %v", err)
 	}
 }

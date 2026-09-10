@@ -274,11 +274,11 @@ go test -v -cover ./...              # With coverage
 **File Structure:**
 
 - `cmd/snag/main.go` - Thin entry point (`cli.Execute`, exit codes)
-- `internal/cli` - Cobra command, flags, handlers, signals
-- `internal/browser` - Rod launch, connect, tab list/select
-- `internal/fetch` - Page navigation and content extraction
-- `internal/format` - HTML to md/html/text/pdf/png
-- `internal/output` - Filename generation and conflict resolution
+- `internal/cli` - Cobra command, flags, handlers, emit (`internal/cli/emit.go`)
+- `internal/browser` - Rod launch, connect, tab list/select (`tabs.go`, `launch.go`)
+- `internal/fetch` - Navigation (`Fetch`) and tab prepare (`Ready`)
+- `internal/format` - HTML to md/html/text/pdf/png (`Render`)
+- `internal/output` - Filenames, conflict resolution, and Write (file or stdout)
 - `internal/validate` - URL and input validation
 - `internal/logger` - Four-level stderr logger
 - `internal/doctor` - `--doctor` diagnostics
@@ -288,8 +288,9 @@ go test -v -cover ./...              # With coverage
 **Key Tab Code Locations:**
 
 ```
-internal/browser/browser.go    # ListTabs, GetTabByIndex, GetTabsByPattern
+internal/browser/tabs.go       # ListTabs, GetPages, GetTabByIndex, GetTabsByPattern
 internal/cli/handlers.go       # handleListTabs, handleTabFetch
+internal/cli/emit.go           # processBatchTabs, processBatchURLs, emitPage
 ```
 
 **Browser Modes:**
@@ -467,7 +468,7 @@ Include this output when reporting issues.
 
 **Performance - GetTabsByPattern():**
 
-- Caches `page.Info()` results in a single pass (`internal/browser/browser.go`)
+- Caches `page.Info()` results in a single pass (`internal/browser/tabs.go`)
 - Reduces network calls from 3N to N (3x improvement for 10 tabs)
 - Do not modify pattern matching without preserving this optimization
 

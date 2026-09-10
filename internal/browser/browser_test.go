@@ -578,6 +578,13 @@ func TestClose_HeadlessNilBrowserNoPanic(t *testing.T) {
 	bm.Close()
 }
 
+func TestGetPages_NoBrowser(t *testing.T) {
+	bm := NewBrowserManager(BrowserOptions{})
+	if _, err := bm.GetPages(); !errors.Is(err, ErrNoBrowserRunning) {
+		t.Fatalf("GetPages: %v", err)
+	}
+}
+
 func TestListTabs_CanceledSession(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -592,6 +599,9 @@ func TestListTabs_CanceledSession(t *testing.T) {
 	}
 	if _, err := bm.GetTabsByPattern("example"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("GetTabsByPattern cancelled session: %v", err)
+	}
+	if _, err := bm.GetPages(); !errors.Is(err, context.Canceled) {
+		t.Fatalf("GetPages cancelled session: %v", err)
 	}
 }
 

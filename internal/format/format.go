@@ -8,7 +8,6 @@ package format
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/base"
@@ -17,11 +16,6 @@ import (
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/table"
 	"github.com/k3a/html2text"
 	"github.com/p3bot/snag/internal/logger"
-)
-
-const (
-	DefaultFileMode = 0644   // Owner RW, Group R, Other R
-	BytesPerKB      = 1024.0 // Bytes in a kilobyte
 )
 
 const (
@@ -44,16 +38,35 @@ type Page interface {
 	BinaryPage
 }
 
-func ProcessContent(page Page, formatName, outputFile string) error {
-	converter := NewContentConverter(formatName)
+// Extension is the filename suffix for a format name, including the dot.
+func Extension(name string) string {
+	switch name {
+	case Markdown:
+		return ".md"
+	case HTML:
+		return ".html"
+	case Text:
+		return ".txt"
+	case PDF:
+		return ".pdf"
+	case PNG:
+		return ".png"
+	default:
+		return ".md"
+	}
+}
+
+// Render converts a loaded page to the named format. It does not write.
+func Render(page Page, formatName string) ([]byte, error) {
+	cc := NewContentConverter(formatName)
 	if formatName == PDF || formatName == PNG {
-		return converter.ProcessPage(page, outputFile)
+		return cc.renderBinary(page)
 	}
 	html, err := page.HTML()
 	if err != nil {
-		return fmt.Errorf("failed to extract HTML: %w", err)
+		return nil, fmt.Errorf("failed to extract HTML: %w", err)
 	}
-	return converter.Process(html, outputFile)
+	return cc.Convert(html)
 }
 
 var markdownConverter = converter.NewConverter(
@@ -75,7 +88,7 @@ func NewContentConverter(format string) *ContentConverter {
 	}
 }
 
-func (cc *ContentConverter) Process(html string, outputFile string) error {
+func (cc *ContentConverter) Convert(html string) ([]byte, error) {
 	var content string
 	var err error
 
@@ -88,7 +101,7 @@ func (cc *ContentConverter) Process(html string, outputFile string) error {
 		logger.Verbose("Converting HTML to Markdown...")
 		content, err = cc.convertToMarkdown(html)
 		if err != nil {
-			return fmt.Errorf("%w: %w", ErrConversionFailed, err)
+			return nil, fmt.Errorf("%w: %w", ErrConversionFailed, err)
 		}
 		logger.Debug("Converted to %d bytes of Markdown", len(content))
 
@@ -98,14 +111,10 @@ func (cc *ContentConverter) Process(html string, outputFile string) error {
 		logger.Debug("Extracted %d bytes of plain text", len(content))
 
 	default:
-		return fmt.Errorf("unsupported format: %s", cc.format)
+		return nil, fmt.Errorf("unsupported format: %s", cc.format)
 	}
 
-	if outputFile != "" {
-		return cc.writeToFile(content, outputFile)
-	}
-
-	return cc.writeToStdout(content)
+	return []byte(content), nil
 }
 
 func (cc *ContentConverter) convertToMarkdown(html string) (string, error) {
@@ -126,96 +135,27 @@ func (cc *ContentConverter) extractPlainText(htmlContent string) string {
 	return text
 }
 
-func (cc *ContentConverter) writeToStdout(content string) error {
-	logger.Verbose("Writing to stdout...")
-
-	_, err := fmt.Print(content)
-	if err != nil {
-		return fmt.Errorf("failed to write to stdout: %w", err)
-	}
-
-	logger.Debug("Wrote %d bytes to stdout", len(content))
-
-	return nil
-}
-
-func (cc *ContentConverter) writeToFile(content string, filename string) error {
-	logger.Verbose("Writing to file: %s", filename)
-
-	if _, err := os.Stat(filename); err == nil {
-		logger.Verbose("Overwriting existing file: %s", filename)
-	}
-
-	err := os.WriteFile(filename, []byte(content), DefaultFileMode)
-	if err != nil {
-		return fmt.Errorf("failed to write to file %s: %w", filename, err)
-	}
-
-	sizeKB := float64(len(content)) / BytesPerKB
-	logger.Success("Saved to %s (%.1f KB)", filename, sizeKB)
-
-	return nil
-}
-
-func (cc *ContentConverter) ProcessPage(page BinaryPage, outputFile string) error {
-	var data []byte
-	var err error
-
+func (cc *ContentConverter) renderBinary(page BinaryPage) ([]byte, error) {
 	switch cc.format {
 	case PDF:
 		logger.Verbose("Generating PDF...")
-		data, err = page.PDF()
+		data, err := page.PDF()
 		if err != nil {
-			return fmt.Errorf("failed to generate PDF: %w", err)
+			return nil, fmt.Errorf("failed to generate PDF: %w", err)
 		}
 		logger.Debug("Generated %d bytes of PDF", len(data))
+		return data, nil
 
 	case PNG:
 		logger.Verbose("Capturing PNG screenshot...")
-		data, err = page.ScreenshotPNG()
+		data, err := page.ScreenshotPNG()
 		if err != nil {
-			return fmt.Errorf("failed to capture PNG screenshot: %w", err)
+			return nil, fmt.Errorf("failed to capture PNG screenshot: %w", err)
 		}
 		logger.Debug("Captured %d bytes of PNG", len(data))
+		return data, nil
 
 	default:
-		return fmt.Errorf("unsupported binary format: %s", cc.format)
+		return nil, fmt.Errorf("unsupported binary format: %s", cc.format)
 	}
-
-	if outputFile != "" {
-		return cc.writeBinaryToFile(data, outputFile)
-	}
-
-	return cc.writeBinaryToStdout(data)
-}
-
-func (cc *ContentConverter) writeBinaryToStdout(data []byte) error {
-	logger.Verbose("Writing binary data to stdout...")
-
-	_, err := os.Stdout.Write(data)
-	if err != nil {
-		return fmt.Errorf("failed to write to stdout: %w", err)
-	}
-
-	logger.Debug("Wrote %d bytes to stdout", len(data))
-
-	return nil
-}
-
-func (cc *ContentConverter) writeBinaryToFile(data []byte, filename string) error {
-	logger.Verbose("Writing binary data to file: %s", filename)
-
-	if _, err := os.Stat(filename); err == nil {
-		logger.Verbose("Overwriting existing file: %s", filename)
-	}
-
-	err := os.WriteFile(filename, data, DefaultFileMode)
-	if err != nil {
-		return fmt.Errorf("failed to write to file %s: %w", filename, err)
-	}
-
-	sizeKB := float64(len(data)) / BytesPerKB
-	logger.Success("Saved to %s (%.1f KB)", filename, sizeKB)
-
-	return nil
 }

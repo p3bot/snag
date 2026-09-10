@@ -8,7 +8,6 @@ package format
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -644,33 +643,43 @@ func (f fakePage) HTML() (string, error)          { return f.html, f.htmlErr }
 func (f fakePage) PDF() ([]byte, error)           { return f.pdf, f.pdfErr }
 func (f fakePage) ScreenshotPNG() ([]byte, error) { return f.png, f.pngErr }
 
-func TestProcessContent_MarkdownToFile(t *testing.T) {
-	out := filepath.Join(t.TempDir(), "out.md")
-	err := ProcessContent(fakePage{html: "<h1>Hello</h1>"}, Markdown, out)
+func TestRender_Markdown(t *testing.T) {
+	got, err := Render(fakePage{html: "<h1>Hello</h1>"}, Markdown)
 	if err != nil {
-		t.Fatalf("ProcessContent: %v", err)
-	}
-	got, err := os.ReadFile(out)
-	if err != nil {
-		t.Fatalf("read output: %v", err)
+		t.Fatalf("Render: %v", err)
 	}
 	if !strings.Contains(string(got), "Hello") {
 		t.Errorf("expected heading text in markdown, got: %s", got)
 	}
 }
 
-func TestProcessContent_PDFUsesPagePDF(t *testing.T) {
-	out := filepath.Join(t.TempDir(), "out.pdf")
+func TestRender_PDFUsesPagePDF(t *testing.T) {
 	payload := []byte("%PDF-fake")
-	err := ProcessContent(fakePage{html: "<h1>ignored</h1>", pdf: payload}, PDF, out)
+	got, err := Render(fakePage{html: "<h1>ignored</h1>", pdf: payload}, PDF)
 	if err != nil {
-		t.Fatalf("ProcessContent: %v", err)
-	}
-	got, err := os.ReadFile(out)
-	if err != nil {
-		t.Fatalf("read output: %v", err)
+		t.Fatalf("Render: %v", err)
 	}
 	if string(got) != string(payload) {
 		t.Errorf("PDF output = %q, want %q", got, payload)
+	}
+}
+
+func TestExtension(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{Markdown, ".md"},
+		{HTML, ".html"},
+		{Text, ".txt"},
+		{PDF, ".pdf"},
+		{PNG, ".png"},
+		{"unknown", ".md"},
+		{"", ".md"},
+	}
+	for _, tt := range tests {
+		if got := Extension(tt.name); got != tt.want {
+			t.Errorf("Extension(%q) = %q, want %q", tt.name, got, tt.want)
+		}
 	}
 }

@@ -388,9 +388,6 @@ func runCobra(cmd *cobra.Command, args []string) error {
 
 	var urls []string
 
-	outputFile := strings.TrimSpace(flagOutput)
-	outDir := strings.TrimSpace(outputDir)
-
 	// Load URLs from file if specified
 	if urlFile != "" {
 		fileURLs, err := loadURLsFromFile(cmd.Context(), strings.TrimSpace(urlFile))
@@ -521,65 +518,27 @@ func runCobra(cmd *cobra.Command, args []string) error {
 
 		logger.Verbose("Target URL: %s", validatedURL)
 
-		outputFormat := validate.NormalizeFormat(flagFormat)
+		cfg, err := newEmitConfig(cmd, false)
+		if err != nil {
+			return err
+		}
 
 		opts, err := browserOptionsFromFlags(cmd, openBrowser, forceHead)
 		if err != nil {
 			return err
 		}
 
-		validatedWaitFor := validate.WaitFor(waitFor, cmd.Flags().Changed("wait-for"))
+		cfg.URL = validatedURL
+		cfg.ForceHeadless = forceHead
+		cfg.OpenBrowser = openBrowser
+		cfg.UserAgent = opts.UserAgent
+		cfg.UserDataDir = opts.UserDataDir
+		cfg.TempProfile = opts.TempProfile
 
-		config := &Config{
-			URL:           validatedURL,
-			OutputFile:    outputFile,
-			OutputDir:     outDir,
-			Format:        outputFormat,
-			Timeout:       timeout,
-			WaitFor:       validatedWaitFor,
-			Port:          port,
-			CloseTab:      closeTab,
-			ForceHeadless: forceHead,
-			OpenBrowser:   openBrowser,
-			UserAgent:     opts.UserAgent,
-			UserDataDir:   opts.UserDataDir,
-			TempProfile:   opts.TempProfile,
-		}
+		logger.Debug("Config: format=%s, timeout=%d, port=%d", cfg.Format, cfg.Timeout, cfg.Port)
+		logger.Verbose("Configuration: format=%s, timeout=%ds, port=%d", cfg.Format, cfg.Timeout, cfg.Port)
 
-		logger.Debug("Config: format=%s, timeout=%d, port=%d", config.Format, config.Timeout, config.Port)
-
-		if err := validate.Format(config.Format); err != nil {
-			return err
-		}
-
-		if err := validate.Timeout(config.Timeout); err != nil {
-			return err
-		}
-
-		if err := validate.Port(config.Port); err != nil {
-			return err
-		}
-
-		if cmd.Flags().Changed("output") || config.OutputFile != "" {
-			if err := validate.OutputPath(config.OutputFile); err != nil {
-				return err
-			}
-			validate.CheckExtensionMismatch(config.OutputFile, config.Format)
-		}
-
-		if cmd.Flags().Changed("output-dir") && config.OutputDir == "" {
-			config.OutputDir = "."
-		}
-
-		if config.OutputDir != "" {
-			if err := validate.Directory(config.OutputDir); err != nil {
-				return err
-			}
-		}
-
-		logger.Verbose("Configuration: format=%s, timeout=%ds, port=%d", config.Format, config.Timeout, config.Port)
-
-		return snag(cmd.Context(), config)
+		return snag(cmd.Context(), cfg)
 	}
 
 	return handleMultipleURLs(cmd, urls)

@@ -15,7 +15,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/p3bot/agentdex"
 	"github.com/spf13/pflag"
 
 	"github.com/p3bot/snag/internal/logger"
@@ -89,15 +88,6 @@ func skillFixtureBins(t *testing.T, names ...string) string {
 		}
 	}
 	return dir
-}
-
-func skillEnvHome(home string) func(string) (string, bool) {
-	return func(k string) (string, bool) {
-		if k == "HOME" {
-			return home, true
-		}
-		return "", false
-	}
 }
 
 func resetCLIFlags() {
@@ -235,18 +225,17 @@ agents: "epsilon-alt": {
 		}
 		return "", exec.ErrNotFound
 	}
-	prevOpts := skillAgentdexOpts
+	restoreOpen := skill.SetTestOpen(&skill.OpenConfig{
+		CatalogDir: catalogDir,
+		CacheDir:   t.TempDir(),
+		Home:       home,
+		SearchDirs: []string{binDir},
+		LookPath:   look,
+	})
 	prevGetwd := skillGetwd
-	skillAgentdexOpts = []agentdex.Option{
-		agentdex.WithCatalogDir(catalogDir),
-		agentdex.WithCacheDir(t.TempDir()),
-		agentdex.WithEnvLookup(skillEnvHome(home)),
-		agentdex.WithLookPath(look),
-		agentdex.WithSearchDirs(binDir),
-	}
 	skillGetwd = func() (string, error) { return wd, nil }
 	t.Cleanup(func() {
-		skillAgentdexOpts = prevOpts
+		restoreOpen()
 		skillGetwd = prevGetwd
 	})
 }
@@ -316,9 +305,8 @@ func TestSkillPrintsEmbed(t *testing.T) {
 }
 
 func TestSkillPrintIgnoresCatalog(t *testing.T) {
-	prev := skillAgentdexOpts
-	skillAgentdexOpts = nil
-	t.Cleanup(func() { skillAgentdexOpts = prev })
+	restoreOpen := skill.SetTestOpen(nil)
+	t.Cleanup(restoreOpen)
 	out, _, err := runSkillCLI(t, "--skill")
 	if err != nil {
 		t.Fatal(err)
@@ -810,17 +798,16 @@ func TestSkillCatalogInvalid(t *testing.T) {
 	home := t.TempDir()
 	wd := t.TempDir()
 	bad := writeSkillCatalog(t, `agents: "x": { name: "", bin: "y", config: {global: "~/.x"}, provider: ["openai"] }`)
-	prevOpts := skillAgentdexOpts
+	restoreOpen := skill.SetTestOpen(&skill.OpenConfig{
+		CatalogDir: bad,
+		CacheDir:   t.TempDir(),
+		Home:       home,
+		LookPath:   func(string) (string, error) { return "", exec.ErrNotFound },
+	})
 	prevGetwd := skillGetwd
-	skillAgentdexOpts = []agentdex.Option{
-		agentdex.WithCatalogDir(bad),
-		agentdex.WithCacheDir(t.TempDir()),
-		agentdex.WithEnvLookup(skillEnvHome(home)),
-		agentdex.WithLookPath(func(string) (string, error) { return "", exec.ErrNotFound }),
-	}
 	skillGetwd = func() (string, error) { return wd, nil }
 	t.Cleanup(func() {
-		skillAgentdexOpts = prevOpts
+		restoreOpen()
 		skillGetwd = prevGetwd
 	})
 	_, _, err := runSkillCLI(t, "--skill-install")

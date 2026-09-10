@@ -85,7 +85,7 @@ TestCLI_InvalidFormat()      // Tests format validation
 
 - `TestSlugifyTitle()` - 12 test cases for slug generation
 - `TestGenerateURLSlug()` - URL fallback slugs, including IPv6 hosts
-- `TestGetFileExtension()` - 7 test cases for format mapping
+- `TestWrite_File()` - bytes written to a path
 - `TestGenerateFilename()` - 8 test cases for complete filename generation
 - `TestResolveConflict()` - File conflict resolution
 - `TestSlugifyTitle_Truncation()` - Edge cases for truncation
@@ -141,7 +141,8 @@ TestValidateUserAgent_SecuritySanitization()
   - Headings, links, tables, strikethrough, lists, code blocks
 - `TestExtractPlainText_*` - Plain text extraction (8 tests)
   - Headings, links, formatting, scripts, lists
-- `TestProcessContent_*` - Page interface (markdown file, PDF bytes)
+- `TestRender_*` - Page interface (markdown bytes, PDF bytes)
+- `TestExtension()` - format name to filename suffix
 
 **Format Verification**:
 
