@@ -186,16 +186,17 @@ package <name>
 
 **Commit Message Format:**
 
-Follow conventional commits style:
+Use Scoped Commits (https://scopedcommits.com): `<scope>: <description>`, optional body, optional trailers.
+
+- Scope is the area touched (for example `browser`, `fetch`, `docs`); list several comma-separated
+- No `feat`/`fix` type prefix
+- No `Co-Authored-By` trailers
 
 ```
-feat(browser): add support for custom user agents
-fix(fetch): resolve WebSocket URL from HTTP endpoint
-docs: reorganise project documentation
-chore(deps): update rod to v0.116.2
+browser: add support for custom user agents
+fetch: resolve WebSocket URL from HTTP endpoint
+deps: update rod to v0.116.2
 ```
-
-Types: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`
 
 **Pull Request Guidelines:**
 
